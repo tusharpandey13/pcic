@@ -138,14 +138,13 @@ export function createPcic(deps: Deps) {
   const hooks = {
     async "agent.open.before"({ request }: any, ctx: any) {
       if (ctx?.paseo) void startIfNeeded(ctx.paseo);
-      if (!claudeOnly(request?.provider)) return;
+      if (!claudeOnly(request?.provider) || (request.purpose && request.purpose !== "interactive")) return;
       try {
         reloadConfig();
         const probe = request.labels?.pcic === "probe";
         const off = request.labels?.pcic === "off" || probe || excluded({ id: request.agentId, cwd: request.cwd ?? "" });
         const env2: Record<string, string> = { ...request.env, PCIC_HOME: home };
         if (off) env2.PCIC_OFF = "1";
-        mk(request.agentId, request.cwd ?? "", { ...request.labels }, request.labels?.[PARENT_LABEL] ?? null);
         return { ...request, env: env2 };
       } catch (e) { log("pcic: open.before failed"); return; }
     },
