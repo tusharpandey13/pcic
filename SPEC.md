@@ -1,6 +1,6 @@
 # pcic spec
 
-`pcic` (working name, "Claude cache governor") brings idle compaction to Claude Code agents that Paseo launches. Claude Code's own `idleCompaction` never fires for them: 0 of 73 compactions on this Mac were idle compactions. pcic runs one checkpoint turn while the prompt cache is still warm, which records state in awt, and then sends `/compact`. When the owner comes back, the next turn sends a summary plus the awt brief instead of rewriting the whole context. A `UserPromptSubmit` guard catches the case the timer missed (Mac asleep, daemon down, opted out) and turns a silent, expensive cold turn into an explicit choice.
+`pcic` (Paseo Claude Idle Compaction) brings idle compaction to Claude Code agents that Paseo launches. Claude Code's own `idleCompaction` never fires for them: 0 of 73 compactions on this Mac were idle compactions. pcic runs one checkpoint turn while the prompt cache is still warm, which records state in awt, and then sends `/compact`. When the owner comes back, the next turn sends a summary plus the awt brief instead of rewriting the whole context. A `UserPromptSubmit` guard catches the case the timer missed (Mac asleep, daemon down, opted out) and turns a silent, expensive cold turn into an explicit choice.
 
 This file and the three rubrics next to it are the only specs. Tests are normative where they exist. Rule ids `R1..` are referenced from `E2E-RUBRIC.md` (tiers T and E), `CHAOS-RUBRIC.md` (C) and `JOURNEYS.md` (J). The traceability table at the end must stay complete: a rule without a test is not in force.
 
@@ -167,7 +167,7 @@ Skip reasons: `late`, `small`, `unknown_context`, `not_idle`, `background_work`,
 
 ### Hooks
 
-- **R28** `pcic install` merges one entry each for `UserPromptSubmit`, `Stop` and `PreCompact` into `${CLAUDE_CONFIG_DIR:-~/.claude}/settings.json`. Each command calls `bin/pcic.mjs hook <event>` by absolute path and ends with `# pcic:hook`. Install is idempotent and makes a timestamped backup when it changes an existing file. A symlinked file is followed and its mode kept. It touches only pcic's own hook objects. `--uninstall` removes only those and leaves no empty arrays. A file that is not JSON is refused and left untouched. This is the same contract as awt's `init --hooks`.
+- **R28** `pcic install` merges one entry each for `UserPromptSubmit`, `Stop` and `PreCompact`, plus a `SessionStart` entry with matcher `clear` (D5), into `${CLAUDE_CONFIG_DIR:-~/.claude}/settings.json`. Each command calls `bin/pcic.mjs hook <event>` by absolute path and ends with `# pcic:hook`. The `SessionStart` command is `[ -z "$AWT_DIR" ] || awt resume --hook --framed # pcic:hook`: it prints the awt brief after `/clear` and does nothing without `AWT_DIR`. Install is idempotent and makes a timestamped backup when it changes an existing file. A symlinked file is followed and its mode kept. It touches only pcic's own hook objects. `--uninstall` removes only those and leaves no empty arrays. A file that is not JSON is refused and left untouched. This is the same contract as awt's `init --hooks`.
 - **R29** The `Stop` hook writes `sessions/<PASEO_AGENT_ID>.json`: `sessionId`, `transcriptPath`, `cwd`, `awtDir` (path, or null), `lastAssistantAt`, `lastAssistantUuid`, `contextTokens`, `model`, `ttlObserved` and `writtenAt`. All of these come from the last non-sidechain assistant entry with usage in at most the last 2 MB of the transcript, and `contextTokens` is input plus cache read plus cache creation. It prints nothing and always exits 0.
 - **R30** The `PreCompact` hook never exits 2. It prints nothing in any of these cases: `precompact` is false; the hook is inactive (R3); neither of the two cases below holds. Otherwise:
   - (a) When `AWT_DIR` is set and `awt resume --hook --framed` (run with `AWT_NO_BRIEF=1`, 3 s timeout) prints anything, the hook prints the awt-aware text below.
@@ -203,7 +203,10 @@ Skip reasons: `late`, `small`, `unknown_context`, `not_idle`, `background_work`,
   Sending now rewrites the whole context: ~$1.09 (estimate, API-equivalent; on a subscription this is plan usage).
   - Send the same message again to continue with the full context. pcic will not stop you again until the next idle gap.
   - Or send /compact first: ~$0.55 once (estimate), then the context is about 15K tokens.
+  - Or send /clear: start empty; the awt brief is added back when AWT_DIR is set.
   ```
+
+  The `/clear` line is printed always. The first 60 characters of the blocked prompt are echoed on a `Your message:` line when the whole message still fits in 600 characters (J3.4: the block erases the prompt from the input).
 
   The resend estimate is tokens times the write price of the observed TTL bucket. The `/compact` estimate is tokens times the input price (uncached read) plus 2,000 output tokens, which is flagged unverified (V8). With an unknown model, both `~$` figures are left out and the token counts are kept.
 - **R34** The guard finishes within 1.5 s and reads at most the last 2 MB of the transcript. Any error, an unparseable transcript or the time limit gives exit 0 with no output.
@@ -217,14 +220,14 @@ Skip reasons: `late`, `small`, `unknown_context`, `not_idle`, `background_work`,
 - **R39** The plugin's cleanup function stops the sweeper, kills any CLI child it spawned and writes nothing more.
 - **R40** `history.jsonl` gets one JSON line per event: `{v:1, at, agent, event, reason?, tokens?, pre?, post?, mode?, ms?}`. Events: `scheduled`, `skipped`, `checkpoint_ok`, `checkpoint_failed`, `compacted`, `compact_unverified`, `compact_failed`, `aborted`, `interrupted`, `race`, `paused`, `probe`, `guard_block`, `guard_pass_marker`, `precompact`. Lines never hold prompt, reply or summary text, cwd or file paths. The file is rotated at 5 MB, keeping one `.1`. A write failure is logged once and changes no decision.
 - **R41** `pcic doctor` is read-only. It checks that:
-  - pcic's three hook entries are installed;
+  - pcic's four hook entries are installed;
   - awt's `SessionStart` `compact` entry (`# awt:context`) is present, with a warning when it is not (the awt brief would be missing after compaction);
   - `AWT_COMPACT_BRIEF` is not `1` in the daemon env, with a warning when it is (the brief would arrive twice);
   - the verdict, the pause state and the config are valid;
   - `PCIC_HOME` is writable.
 
   It exits 0 when everything is ok and 1 on any problem.
-- **R42** pcic sends only three texts: the checkpoint text (R14), `/compact`, and the probe's `/compact`. It creates and archives only probe agents. It answers no permission request.
+- **R42** pcic sends only three texts (the guard's `/clear` offer is a suggestion to the owner, never a send): the checkpoint text (R14), `/compact`, and the probe's `/compact`. It creates and archives only probe agents. It answers no permission request.
 - **R43** Config: an invalid value falls back to its default with one warning naming the key, and unknown keys are warned once. A config that cannot be parsed means all defaults plus one warning. Neither stops the plugin.
 
 ## awt
@@ -233,13 +236,18 @@ No awt changes are needed. pcic uses `awt state/decide/note` (the checkpoint), `
 
 Known interaction: after the `/compact` turn, the awt plugin's stand-in handoff may record `[auto] checkpoint saved` in scope `auto`. That is harmless, because scope `auto` never replaces the agent's own state. An optional later awt change is to skip turns whose user message is `/compact` or starts `[pcic`. It is not in v1.
 
-## Where it lives (owner decides)
+## Resolved decisions (owner, 18-Nov-2026)
 
-| Option | For | Against |
-|---|---|---|
-| **A. Separate repo `pcic`** (recommended) | Different host (Paseo plugin plus Claude Code hooks, not a pi extension), different install, its own small test harness. pcg stays a single pi package | One more repo |
-| B. `packages/pcic/` in the pcg repo (`/Users/t/src/wt/pi-governor`) | One "cache governor" home, shared README story | pcg is a public single-package pi extension; this forces a workspace layout and mixes pi and Paseo test stacks. Little shared code (only the checkpoint idea; prices differ by source) |
-| C. A second plugin in the awt repo | Next to the awt Paseo plugin | Cache cost is not awt's concern; it adds surface to a repo bound by "complexity is debt" |
+| Id | Decision |
+|---|---|
+| D1 | Separate repo `pcic` (option A; B and C rejected). Remote `tusharpandey13/pcic`, created and pushed by the orchestrator, not by the build |
+| D2 | A short-lived probe agent is acceptable: the self-test (R23) runs once per Paseo version, as specified |
+| D3 | Defaults as specified: `minContextTokens` 100000, `idleSeconds` 3300 (55 min), `maxConcurrent` 2, `maxJobsPerHour` 30 |
+| D4 | A parent agent waiting on subagents is compacted anyway (R10 checks `backgroundWork`, not Paseo children) |
+| D5 | The cold-return guard offers three ways out: resend, `/compact`, or `/clear` plus the awt brief. For the brief after `/clear`, `pcic install` adds its own `SessionStart` hook, matcher `clear`, running `awt resume --hook --framed` only when `AWT_DIR` is set. awt is not changed |
+| D6 | Heartbeat and schedule prompts pass the guard when recognisable: they arrive with the `<paseo-system` envelope (R31) |
+| D7 | Hooks are installed by merging into `settings.json` the way `awt init --hooks claude` does: never overwrite, idempotent, timestamped backup (R28) |
+| D8 | The live Tier E suite is run by the owner or orchestrator after the build, never by the build agent |
 
 ## Non-goals
 

@@ -1,0 +1,7 @@
+{
+  "id": "pcic",
+  "name": "pcic",
+  "description": "Paseo Claude Idle Compaction: checkpoint and compact idle Claude agents while their prompt cache is warm",
+  "media": [],
+  "requirements": { "paseo": ">=0.16.1" }
+}

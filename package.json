@@ -1,0 +1,16 @@
+{
+  "name": "pcic",
+  "private": true,
+  "version": "0.1.0",
+  "description": "Paseo Claude Idle Compaction",
+  "type": "module",
+  "license": "MIT",
+  "bin": { "pcic": "bin/pcic.mjs" },
+  "scripts": {
+    "typecheck": "tsc --noEmit",
+    "test": "tsc --noEmit && node --import tsx --test --test-concurrency=4 test/*.test.ts",
+    "test:e2e": "PCIC_E2E=1 node --import tsx --test --test-timeout=900000 test/e2e/*.test.ts"
+  },
+  "dependencies": { "@getpaseo/plugin": "0.16.1" },
+  "devDependencies": { "@types/node": "^22.0.0", "tsx": "^4.19.0", "typescript": "^5.9.3" }
+}
