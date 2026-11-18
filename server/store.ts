@@ -1,7 +1,7 @@
 // The state dir (SPEC: State dir). Every write is temp + rename; claims are O_EXCL.
 import { mkdirSync, readdirSync, rmSync, statSync } from "node:fs";
 import { join } from "node:path";
-import { atomicWrite, createExcl, readJson, record } from "../shared/common.mjs";
+import { atomicWrite, createExcl, readJson, record } from "../server/common.mjs";
 
 export interface SessionRecord { sessionId: string | null; transcriptPath: string; cwd: string | null; awtDir: string | null; lastAssistantAt: number; lastAssistantUuid: string | null; contextTokens: number | null; model: string | null; ttlObserved: number | null; writtenAt: number }
 export interface JobFile { jobId: string; anchor: number; phase: string; startedAt: number }

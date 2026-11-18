@@ -2,7 +2,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { existsSync, mkdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
-import { record } from "../shared/common.mjs";
+import { record } from "../server/common.mjs";
 import { MIN, T0, agentPayload, historyOf, idleAgent, listing, rig, tmp } from "./harness.js";
 
 // T33 (R40) + N3
