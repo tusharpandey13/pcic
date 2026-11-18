@@ -87,7 +87,7 @@ export function createPcic(deps: Deps) {
     if (optedOut(a)) return a.labels.pcic === "off" ? "opted_out" : "excluded";
     if (s.internal || s.background || a.labels.pcic === "probe") return "excluded";
     if ((a.parent || s.labels?.[PARENT_LABEL]) && !cfg.includeSubagents) return "subagent";
-    if (s.status !== "idle" || s.activeTurn || (s.pendingPermissions?.length ?? 0) > 0) return "not_idle";
+    if ((s.status !== "idle" && s.status !== "closed") || s.activeTurn || (s.pendingPermissions?.length ?? 0) > 0) return "not_idle";
     if ((num(s.backgroundWork?.count) ?? 0) > 0) return "background_work";
     if (a.job?.foreign) return "not_idle";
     const used = num(s.lastUsage?.contextWindowUsedTokens);

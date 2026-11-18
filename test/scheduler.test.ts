@@ -291,9 +291,11 @@ test("T13 a foreign turn whose own prompt is in the timeline under its turnId is
   const r = rig(); await idleAgent(r, "a"); r.paseo.onSend = async (id) => { r.paseo.say(id, "user_message", "ZQX-PROMPT mine", {}, "t-owner"); await r.call("agent.turn.before", { agent: agentPayload(id), turnId: "t-owner" }); };
   await goDue(r); assert.deepEqual(texts(r), [CHECKPOINT_TEXT]); assert.ok(events(r).includes("aborted:user")); r.cleanup();
 });
-test("T8 a closed agent (runtime not loaded, V5 unverified) is not_idle: no send", async () => {
+test("T8 a closed agent (as after a daemon restart; a send resumes it warm, V5 confirmed live) is handled like an idle one; running and initializing agents are not", async () => {
   const r = rig(); await idleAgent(r, "a"); r.paseo.agents_.get("a")!.snap.status = "closed"; await goDue(r);
-  assert.deepEqual(r.paseo.sent, []); assert.equal(r.pcic.state("a")!.result, "not_idle"); r.cleanup();
+  assert.ok(r.paseo.sent.length > 0); r.cleanup();
+  const q = rig(); await idleAgent(q, "a"); q.paseo.agents_.get("a")!.snap.status = "initializing"; await goDue(q);
+  assert.deepEqual(q.paseo.sent, []); assert.equal(q.pcic.state("a")!.result, "not_idle"); q.cleanup();
 });
 test("T12 a canceled checkpoint: run() reports idle (as Paseo does) and turn.after lands during the pre-compact check; no /compact", async () => {
   const r = rig(); await idleAgent(r, "a"); r.paseo.outcomeKind = "canceled"; r.paseo.runStatus = "idle";
