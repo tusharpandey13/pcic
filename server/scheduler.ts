@@ -3,7 +3,7 @@ import { randomUUID } from "node:crypto";
 import { statSync } from "node:fs";
 import { join } from "node:path";
 import { loadConfig, num, pcicHome } from "../hook/common.mjs";
-import { makeSender, realTimer, rows, type Handle, type PaseoLike, type Snap, type Timer } from "./send.js";
+import { makeSender, realTimer, turnUserText, type Handle, type PaseoLike, type Snap, type Timer } from "./send.js";
 import { makeStore, type SessionRecord } from "./store.js";
 import { PAUSE_CODES, type Config } from "./types.js";
 import { runJob } from "./job.js";
@@ -62,7 +62,7 @@ export function createPcic(deps: Deps) {
   };
   const mk = (id: string, cwd: string, labels: Record<string, string>, parent: string | null): Agent => {
     let a = agents.get(id);
-    if (!a) agents.set(id, (a = { id, cwd, parent, labels, state: "active", anchor: 0, due: 0, deadline: 0, ttlObs: null, turnStart: null, ownActive: false, job: null }));
+    if (!a) agents.set(id, (a = { id, cwd, parent, labels: labels ?? {}, state: "active", anchor: 0, due: 0, deadline: 0, ttlObs: null, turnStart: null, ownActive: false, job: null }));
     a.cwd = cwd || a.cwd; a.parent = parent ?? a.parent; if (labels) a.labels = labels;
     return a;
   };
@@ -87,7 +87,7 @@ export function createPcic(deps: Deps) {
     if (optedOut(a)) return a.labels.pcic === "off" ? "opted_out" : "excluded";
     if (s.internal || s.background || a.labels.pcic === "probe") return "excluded";
     if ((a.parent || s.labels?.[PARENT_LABEL]) && !cfg.includeSubagents) return "subagent";
-    if (!(s.status === "idle" || s.status === "closed") || s.activeTurn || (s.pendingPermissions?.length ?? 0) > 0) return "not_idle";
+    if (s.status !== "idle" || s.activeTurn || (s.pendingPermissions?.length ?? 0) > 0) return "not_idle";
     if ((num(s.backgroundWork?.count) ?? 0) > 0) return "background_work";
     if (a.job?.foreign) return "not_idle";
     const used = num(s.lastUsage?.contextWindowUsedTokens);
@@ -125,11 +125,12 @@ export function createPcic(deps: Deps) {
     } catch (e) { log(`pcic: start failed (${(e as Error)?.name ?? "error"})`); }
   }
 
-  async function ownTurn(a: Agent): Promise<boolean> {
+  /** R16. Paseo publishes turn_started before it records the prompt, so only this turn's own entries (by turnId) count; none yet means pcic's. */
+  async function ownTurn(a: Agent, turnId: string | null): Promise<boolean> {
     const j = a.job;
     if (!j || j.sent === 0 || j.ownSeen >= j.sent) return false;
     let text: string | null = null;
-    try { const r = rows(await handle(a.id).timeline.refetch({ direction: "tail", limit: 20, wholeTurns: true })).filter((x) => x.type === "user_message"); text = r.length ? r[r.length - 1].text : null; } catch {}
+    try { if (turnId) text = turnUserText(await handle(a.id).timeline.refetch({ direction: "tail", limit: 20, wholeTurns: true }), turnId); } catch {}
     const own = text === null ? true : text.startsWith("[pcic checkpoint]") || text === "/compact" || (text.includes("<paseo-system") && text.includes("/compact")); // the last form is an enveloped send (R25)
     if (own) j.ownSeen++;
     return own;
@@ -148,12 +149,12 @@ export function createPcic(deps: Deps) {
         return { ...request, env: env2 };
       } catch (e) { log("pcic: open.before failed"); return; }
     },
-    async "agent.turn.before"({ agent }: any, ctx: any) {
+    async "agent.turn.before"({ agent, turnId }: any, ctx: any) {
       try {
         if (!claudeOnly(agent?.provider)) return;
         if (ctx?.paseo) await startIfNeeded(ctx.paseo);
         const a = mk(agent.id, agent.cwd, null as any, agent.parentAgentId ?? null);
-        if (await ownTurn(a)) { a.ownActive = true; return; }
+        if (await ownTurn(a, turnId ?? null)) { a.ownActive = true; return; }
         if (a.job) { a.job.foreign = true; if (now() - a.job.lastSendAt <= 2000) store.hist({ agent: a.id, event: "race" }); }
         a.state = "active"; a.turnStart = now();
       } catch { log("pcic: turn.before failed"); }
@@ -197,12 +198,12 @@ export function createPcic(deps: Deps) {
       for (const a of [...agents.values()]) {
         if (a.state !== "idle_wait") continue;
         if (a.anchor > t) schedule(a, t); // R9
-        try { absorb(a, handle(a.id).current()); } catch {}
         if (optedOut(a)) { a.state = "untracked"; continue; }
         if (t > a.deadline) { skip(a, "late"); continue; }
         if (t >= a.due) {
           const why = await check(a);
           if (a.state !== "idle_wait") continue;
+          if (why === "opted_out") { a.state = "untracked"; continue; } // R35: a label read at the check
           if (why) { skip(a, why); continue; }
           a.state = "queued"; store.hist({ agent: a.id, event: "scheduled" });
         }

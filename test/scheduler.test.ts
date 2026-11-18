@@ -280,3 +280,29 @@ test("T35 pcic sends only the R42 texts and never answers a permission request",
   const src = ["scheduler", "job", "send"].map((f) => readFileSync(join(import.meta.dirname, "..", "server", `${f}.ts`), "utf8")).join("\n"); assert.ok(!/respondToPermission/.test(src)); assert.ok(!/sourceAgentId/.test(src.replace(/never passes sourceAgentId/g, ""))); assert.deepEqual(r.paseo.created, []); r.cleanup();
 });
 void asst;
+
+// ---- review fixes (R10, R15, R16, R20) -------------------------------------------------------------
+test("T13 real ordering: turn.before arrives before the prompt is in the timeline; pcic's turn still counts as own, the job compacts and the anchor stays", async () => {
+  const r = rig(); await idleAgent(r, "a"); r.paseo.lateEcho = true; await goDue(r);
+  assert.deepEqual(texts(r), [CHECKPOINT_TEXT, "/compact"]); assert.deepEqual(events(r, "a"), ["scheduled", "checkpoint_ok", "compacted"]);
+  assert.equal(r.pcic.state("a")!.state, "done"); assert.equal(r.pcic.state("a")!.anchor, T0); r.cleanup();
+});
+test("T13 a foreign turn whose own prompt is in the timeline under its turnId is foreign even while a pcic send is unseen", async () => {
+  const r = rig(); await idleAgent(r, "a"); r.paseo.onSend = async (id) => { r.paseo.say(id, "user_message", "ZQX-PROMPT mine", {}, "t-owner"); await r.call("agent.turn.before", { agent: agentPayload(id), turnId: "t-owner" }); };
+  await goDue(r); assert.deepEqual(texts(r), [CHECKPOINT_TEXT]); assert.ok(events(r).includes("aborted:user")); r.cleanup();
+});
+test("T8 a closed agent (runtime not loaded, V5 unverified) is not_idle: no send", async () => {
+  const r = rig(); await idleAgent(r, "a"); r.paseo.agents_.get("a")!.snap.status = "closed"; await goDue(r);
+  assert.deepEqual(r.paseo.sent, []); assert.equal(r.pcic.state("a")!.result, "not_idle"); r.cleanup();
+});
+test("T12 a canceled checkpoint: run() reports idle (as Paseo does) and turn.after lands during the pre-compact check; no /compact", async () => {
+  const r = rig(); await idleAgent(r, "a"); r.paseo.outcomeKind = "canceled"; r.paseo.runStatus = "idle";
+  let late: (() => Promise<void>) | null = null; const orig = r.paseo.onTurnEnd;
+  r.paseo.onTurnEnd = (...x) => { late = () => orig(...x) as Promise<void>; };
+  r.paseo.onRefresh = () => { const f = late; late = null; if (f) void f(); };
+  await goDue(r); assert.deepEqual(texts(r), [CHECKPOINT_TEXT]); assert.ok(events(r).includes("checkpoint_failed:canceled"), events(r).join()); r.cleanup();
+});
+test("T5 an agent first seen at a turn hook whose refresh fails is still tracked (labels default to none)", async () => {
+  const r = rig(); r.paseo.add("a"); await r.pcic.start(r.paseo); r.paseo.agents_.delete("a"); r.paseo.add("b"); r.paseo.refreshThrows = true;
+  await r.turn("b"); assert.equal(r.pcic.state("b")!.state, "idle_wait"); assert.ok(!r.logs.some((l) => l.includes("failed")), r.logs.join()); r.cleanup();
+});

@@ -55,7 +55,7 @@ export function makeSender(d: SenderDeps) {
 
   const cliSend = (id: string, text: string): Promise<void> => new Promise((ok, no) => {
     const env = { ...d.env }; for (const k of IDENTITY) delete env[k];
-    const c = execFile(d.cfg().paseoBin, ["agent", "send", id, text], { env, timeout: d.cliTimeoutMs ?? 30000, killSignal: "SIGKILL" }, (err) => { children.delete(c); if (err) d.log(`pcic: cli send failed (${(err as NodeJS.ErrnoException).code ?? err.name})`); err ? no(err) : ok(); });
+    const c = execFile(d.cfg().paseoBin, ["agent", "send", "--behavior", "steer", id, text], { env, timeout: d.cliTimeoutMs ?? 30000, killSignal: "SIGKILL" }, (err) => { children.delete(c); if (err) d.log(`pcic: cli send failed (${(err as NodeJS.ErrnoException).code ?? err.name})`); err ? no(err) : ok(); });
     children.add(c);
     c.stdin?.end();
   });
@@ -132,6 +132,14 @@ export function judge(page: unknown): Mode {
   };
   walk(page, 0);
   return envelope || reply ? "cli" : "plugin";
+}
+
+/** The first user_message text among the entries of one turn, or null when the turn has none yet. */
+export function turnUserText(page: unknown, turnId: string): string | null {
+  const entries = (page as { entries?: unknown })?.entries;
+  if (!Array.isArray(entries)) return null;
+  for (const e of entries as { turnId?: unknown; item?: { type?: unknown; text?: unknown } }[]) if (e?.turnId === turnId && e.item?.type === "user_message" && typeof e.item.text === "string") return e.item.text;
+  return null;
 }
 
 /** Timeline helper shared by the job: user_message and compaction rows in order. */

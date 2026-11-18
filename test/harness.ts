@@ -98,6 +98,8 @@ export class FakePaseo implements PaseoLike {
   probeTimeline: unknown[] = [];
   /** While true, waiting turns block until release(). `active` counts turns in flight. */
   hold = false; active = 0; maxActive = 0; gates: (() => void)[] = []; sendTimes: number[] = []; onRefresh: (id: string) => void = () => {}; outcomeKind: "failed" | "canceled" = "failed";
+  /** Real Paseo dispatches turn_started before it records the prompt: with lateEcho the user_message lands after turn.before. */
+  lateEcho = false;
   release() { this.hold = false; this.gates.splice(0).forEach((g) => g()); }
   now: () => number = () => 0;
   constructor(private rig: () => Rig | null) {}
@@ -106,7 +108,7 @@ export class FakePaseo implements PaseoLike {
     this.agents_.set(id, { snap, page: [] }); return snap;
   }
   setPage(id: string, items: unknown[]) { (this.agents_.get(id) as FakeAgent).page = items; }
-  say(id: string, type: string, text: string, extra: Record<string, unknown> = {}) { (this.agents_.get(id) as FakeAgent).page.push({ item: { type, text, ...extra } }); }
+  say(id: string, type: string, text: string, extra: Record<string, unknown> = {}, turnId?: string) { (this.agents_.get(id) as FakeAgent).page.push({ item: { type, text, ...extra }, ...(turnId ? { turnId } : {}) }); }
   agents = {
     ref: (id: string): Handle => this.handle(id),
     list: async () => { if (this.listThrows) throw new Error("list"); return { entries: [...this.agents_.values()].map((a) => ({ agent: a.snap })) }; },
@@ -122,8 +124,10 @@ export class FakePaseo implements PaseoLike {
     const record = async (text: string, opts?: Record<string, unknown>) => {
       if (this.sendThrows) throw new Error("send refused");
       this.sent.push({ id, text, opts }); this.sendTimes.push(this.now()); this.active++; this.maxActive = Math.max(this.maxActive, this.active);
-      this.say(id, "user_message", text);
+      const turnId = `own-${this.sent.length}`;
+      if (!this.lateEcho) this.say(id, "user_message", text, {}, turnId);
       await this.onSend(id, text);
+      if (this.lateEcho) this.say(id, "user_message", text, {}, turnId);
     };
     const waiting = async (text: string) => {
       if (this.runStatus === "never") return new Promise<never>(() => {});
@@ -133,11 +137,11 @@ export class FakePaseo implements PaseoLike {
       if (this.runStatus !== "permission") await this.onTurnEnd(id, text, r); // a turn waiting for a permission has not ended
       return r;
     };
-    let last = "";
+    let last = "", seen = false; // like a real ref(), current() is null until a refresh
     return {
       id,
-      refresh: async () => { if (this.refreshThrows) throw new Error("refresh"); this.onRefresh(id); return null; },
-      current: () => (a() ? a().snap : null),
+      refresh: async () => { if (this.refreshThrows) throw new Error("refresh"); this.onRefresh(id); seen = true; return null; },
+      current: () => (seen && a() ? a().snap : null),
       send: async (text, o) => { await record(text, o); last = text; },
       run: async (text, o) => { await record(text, o); return waiting(text); },
       waitForFinish: async () => waiting(last),
@@ -173,7 +177,7 @@ export function rig(o: RigOpts = {}): Rig {
     paseo.onTurnEnd = async (id, text, r) => {
       if (id.startsWith("probe_")) return;
       if (text === "/compact" && o.autoCompact !== false) { const rec = readJsonFile(join(t.home, "sessions", `${id}.json`)); writeFileSync(rec.transcriptPath, JSON.stringify({ type: "system", subtype: "compact_boundary", timestamp: new Date(clock.now()).toISOString(), compactMetadata: { trigger: "manual", preTokens: 150000, postTokens: 8000 } }) + "\n", { flag: "a" }); }
-      await call("agent.turn.after", { agent: agentPayload(id), turnId: "own", outcome: r.status === "idle" ? { kind: "completed" } : paseo.outcomeKind === "canceled" ? { kind: "canceled", reason: "x" } : { kind: "failed", error: { message: "x", code: r.code } } });
+      await call("agent.turn.after", { agent: agentPayload(id), turnId: "own", outcome: paseo.outcomeKind === "canceled" ? { kind: "canceled", reason: "x" } : r.status === "idle" ? { kind: "completed" } : { kind: "failed", error: { message: "x", code: r.code } } });
     };
   }
   const writeSession = (id: string, over: Record<string, unknown> = {}) => {
@@ -187,7 +191,7 @@ export function rig(o: RigOpts = {}): Rig {
     run: async () => { await settle(); await pcic.idle(); await settle(); },
     /** A foreign (owner) turn on an agent: turn.before, then turn.after, with a fresh session record. */
     turn: async (id, x = {}) => {
-      paseo.say(id, "user_message", x.text ?? "ZQX-PROMPT work");
+      paseo.say(id, "user_message", x.text ?? "ZQX-PROMPT work", {}, "t-foreign");
       await call("agent.turn.before", { agent: agentPayload(id), turnId: "t-foreign" });
       if (x.record !== false) r.writeSession(id, typeof x.record === "object" ? x.record : {});
       await call("agent.turn.after", { agent: agentPayload(id), turnId: "t-foreign", outcome: x.outcome ?? { kind: "completed" } });

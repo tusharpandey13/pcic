@@ -26,6 +26,8 @@ export function entries() {
 }
 
 const ours = (h) => h && typeof h === "object" && String(h.command ?? "").includes(MARK);
+/** True when another tool (newer awt) already prints the awt brief after /clear: pcic's own clear entry would inject it twice. */
+export const awtClearHook = (sessionStart) => Array.isArray(sessionStart) && sessionStart.some((e) => e && String(e.matcher ?? "").split("|").includes("clear") && Array.isArray(e.hooks) && e.hooks.some((h) => h && !ours(h) && /\bawt resume\b/.test(String(h.command ?? ""))));
 const same = (a, b) => JSON.stringify(a) === JSON.stringify(b);
 const fail = (msg, fix) => { process.stderr.write(`error: ${msg}\nfix: ${fix}\n`); process.exit(1); };
 
@@ -41,22 +43,24 @@ export function mergeSettings(file, uninstall) {
     }
     const before = JSON.stringify(st);
     const hooks = (st.hooks ??= {});
+    const awtClear = awtClearHook(hooks.SessionStart);
     for (const [ev, want] of Object.entries(entries())) {
+      const drop = uninstall || (ev === "SessionStart" && awtClear);
       if (hooks[ev] !== undefined && !Array.isArray(hooks[ev])) fail(`${path} has hooks.${ev} that is not a list; pcic will not touch it`, `make hooks.${ev} a list, then run this again`);
       const list = (hooks[ev] ??= []);
       const mine = list.flatMap((e) => (e && Array.isArray(e.hooks) ? e.hooks.filter(ours) : []));
-      const exact = !uninstall && mine.length === 1 && list.some((e) => e?.matcher === want.matcher && Array.isArray(e.hooks) && e.hooks.some((h) => same(h, want.hooks[0])));
+      const exact = !drop && mine.length === 1 && list.some((e) => e?.matcher === want.matcher && Array.isArray(e.hooks) && e.hooks.some((h) => same(h, want.hooks[0])));
       if (!exact) {
         for (let i = list.length - 1; i >= 0; i--) {
           const e = list[i];
           if (e && Array.isArray(e.hooks) && e.hooks.some(ours)) { e.hooks = e.hooks.filter((h) => !ours(h)); if (!e.hooks.length) list.splice(i, 1); }
         }
-        if (!uninstall) list.push(want);
+        if (!drop) list.push(want);
       }
       if (!list.length) delete hooks[ev];
     }
     if (!Object.keys(hooks).length) delete st.hooks;
-    if (JSON.stringify(st) === before && (raw !== null || uninstall)) return { res: raw === null ? "absent" : "unchanged" };
+    if (JSON.stringify(st) === before && (raw !== null || uninstall)) return { res: raw === null ? "absent" : "unchanged", awtClear };
     let backup;
     if (raw !== null) {
       backup = `${path}.pcic-bak-${new Date().toISOString().replace(/\D/g, "").slice(0, 17)}-${process.pid}`;
@@ -71,16 +75,17 @@ export function mergeSettings(file, uninstall) {
     const tmp = `${path}.pcic-tmp-${process.pid}`;
     writeFileSync(tmp, JSON.stringify(st, null, 2) + "\n", { mode });
     renameSync(tmp, path);
-    return { res: uninstall ? "removed" : raw === null ? "installed" : "updated", backup };
+    return { res: uninstall ? "removed" : raw === null ? "installed" : "updated", backup, awtClear };
   }
   fail(`${file} keeps changing while pcic reads it`, "close the running Claude Code sessions, then run this again");
 }
 
 function install(uninstall) {
   const file = settingsPath();
-  const { res, backup } = mergeSettings(file, uninstall);
-  const what = res === "unchanged" || res === "absent" ? "nothing changed" : `${uninstall ? "removed" : "added"} ${EVENTS.length} entries (${EVENTS.join(", ")})`;
-  console.log(`hooks: ${res}, ${what}: ${file}${backup ? `\nbackup: ${backup}` : ""}`);
+  const { res, backup, awtClear } = mergeSettings(file, uninstall);
+  const evs = awtClear && !uninstall ? EVENTS.filter((e) => e !== "SessionStart") : EVENTS;
+  const what = res === "unchanged" || res === "absent" ? "nothing changed" : `${uninstall ? "removed" : "added"} ${evs.length} entries (${evs.join(", ")})`;
+  console.log(`hooks: ${res}, ${what}: ${file}${backup ? `\nbackup: ${backup}` : ""}${awtClear && !uninstall ? "\nSessionStart clear brief provided by awt; pcic adds none" : ""}`);
 }
 
 function doctor(env = process.env) {
@@ -90,8 +95,10 @@ function doctor(env = process.env) {
   const file = settingsPath(env);
   const st = readJson(file);
   const list = (ev) => (Array.isArray(st?.hooks?.[ev]) ? st.hooks[ev].flatMap((e) => (Array.isArray(e?.hooks) ? e.hooks : [])) : []);
-  const missing = EVENTS.filter((ev) => !list(ev).some(ours));
-  missing.length ? bad(`pcic hook entries missing: ${missing.join(", ")}`, "pcic install") : ok("pcic hooks installed (4 entries)");
+  const awtClear = awtClearHook(st?.hooks?.SessionStart);
+  const missing = EVENTS.filter((ev) => !(ev === "SessionStart" && awtClear) && !list(ev).some(ours));
+  missing.length ? bad(`pcic hook entries missing: ${missing.join(", ")}`, "pcic install") : ok(`pcic hooks installed (${awtClear ? 3 : 4} entries)`);
+  if (awtClear) ok("SessionStart clear brief provided by awt");
   list("SessionStart").some((h) => String(h.command ?? "").includes(AWT_MARK)) ? ok("awt compact hook present") : bad("awt's SessionStart compact hook is not installed; the awt brief would be missing after compaction", "awt init --hooks claude");
   env.AWT_COMPACT_BRIEF === "1" ? bad("AWT_COMPACT_BRIEF=1 is set; the brief would arrive twice", "unset AWT_COMPACT_BRIEF in the daemon environment") : ok("AWT_COMPACT_BRIEF not set");
   const home = pcicHome(env);

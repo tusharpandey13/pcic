@@ -78,7 +78,7 @@ awt init --hooks claude          # if not done already: the awt brief after comp
 node bin/pcic.mjs doctor
 ```
 
-`pcic install` merges four entries (`UserPromptSubmit`, `Stop`, `PreCompact`, and `SessionStart` with matcher `clear`) into `${CLAUDE_CONFIG_DIR:-~/.claude}/settings.json`. Each command ends with `# pcic:hook`. It is idempotent, keeps a timestamped backup (`settings.json.pcic-bak-*`, the last five) whenever it changes the file, follows a symlink, leaves every other hook alone, and refuses a file that is not valid JSON.
+`pcic install` merges four entries (`UserPromptSubmit`, `Stop`, `PreCompact`, and `SessionStart` with matcher `clear`) into `${CLAUDE_CONFIG_DIR:-~/.claude}/settings.json`. Each command ends with `# pcic:hook`. When a `SessionStart` `clear` hook that runs `awt resume` is already there (newer awt installs its own), pcic adds no `clear` entry, so the brief is not injected twice. It is idempotent, keeps a timestamped backup (`settings.json.pcic-bak-*`, the last five) whenever it changes the file, follows a symlink, leaves every other hook alone, and refuses a file that is not valid JSON.
 
 On first start the plugin runs a one-time self-test per Paseo version: it creates a short-lived probe agent in `$PCIC_HOME/probe/` (label `pcic=probe`), sends it `/compact`, checks the text arrived plain, and archives it. The result is kept in `verdict.json`.
 
@@ -108,7 +108,7 @@ State lives in `PCIC_HOME`, default `${XDG_DATA_HOME:-~/.local/share}/pcic`. Set
 | `sweepSeconds` | `30` | Sweeper period |
 | `sendMode` | `"auto"` | `"auto"` (the self-test decides), `"plugin"` or `"cli"` |
 | `paseoBin` | `"paseo"` | CLI used by the fallback send mode |
-| `probeModel` | `""` | Model for the self-test agent; empty means Paseo's default Claude model |
+| `probeModel` | `"haiku"` | Model for the self-test agent (the cheapest Claude model); empty means Paseo's default Claude model |
 | `prices` | `null` | Your own $/M prices, keyed by a substring of the model id: `{"input", "write5m", "write1h", "read", "output"}`. Used only for the guard's estimate |
 
 To exclude one agent, give it the Paseo label `pcic=off`. To turn pcic off everywhere, set `"enabled": false`.
@@ -121,7 +121,7 @@ To exclude one agent, give it the Paseo label `pcic=off`. To turn pcic off every
 node bin/pcic.mjs doctor
 ```
 
-Read-only. It checks that the four pcic hooks are installed, that awt's `SessionStart` `compact` hook is present, that `AWT_COMPACT_BRIEF=1` is not set (the brief would arrive twice), that `verdict.json`, `pause.json` and `config.json` are valid, and that `PCIC_HOME` is writable. Each problem prints a `fix:` line. Exit 0 when everything is ok, 1 otherwise.
+Read-only. It checks that the four pcic hooks are installed (three when awt provides the `clear` brief), that awt's `SessionStart` `compact` hook is present, that `AWT_COMPACT_BRIEF=1` is not set (the brief would arrive twice), that `verdict.json`, `pause.json` and `config.json` are valid, and that `PCIC_HOME` is writable. Each problem prints a `fix:` line. Exit 0 when everything is ok, 1 otherwise.
 
 ## Uninstall
 

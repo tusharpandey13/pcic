@@ -36,3 +36,6 @@ test("R5 num accepts only finite non-negative numbers", () => {
   assert.equal(num(0), 0); assert.equal(num(12), 12);
 });
 void settle;
+test("T1 probeModel defaults to haiku, the cheapest Claude model (R23)", () => {
+  const t = tmp(); assert.equal(loadConfig(t.env).probeModel, "haiku"); t.cleanup();
+});

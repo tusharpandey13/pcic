@@ -38,7 +38,7 @@ export function scan(lines) {
       if (at !== null) boundary = { at, pre: num(e.compactMetadata?.preTokens), post: num(e.compactMetadata?.postTokens) };
       continue;
     }
-    if (e.type !== "assistant" || e.isSidechain) continue;
+    if (e.type !== "assistant" || e.isSidechain || e.message?.model === "<synthetic>") continue; // stand-ins for errors carry zero usage
     const u = e.message?.usage;
     if (!u || typeof u !== "object") continue;
     const at = ms(e.timestamp);

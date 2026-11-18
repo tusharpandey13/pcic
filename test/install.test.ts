@@ -60,3 +60,14 @@ test("T34 doctor names each failing check and exits 1", async () => {
   chmodSync(t.home, 0o500); r = await cli(["doctor"], t.env); assert.match(r.stdout, /not writable/); chmodSync(t.home, 0o700);
   r = await cli(["doctor"], t.env); assert.equal(r.code, 0, r.stdout); t.cleanup();
 });
+// T23/T34 (R28, D5): awt's own SessionStart clear hook makes pcic's redundant
+const awtClear = { matcher: "clear", hooks: [{ type: "command", command: "awt resume --hook --framed # awt:context" }] };
+test("T23 an existing SessionStart clear hook that runs awt resume: pcic adds no clear entry of its own and removes a stale one; doctor says provided by awt", async () => {
+  const t = tmp(); await cli(["install"], t.env); const st = readJsonFile(settings(t));
+  st.hooks.SessionStart.push(awtClear, { matcher: "compact", hooks: [{ type: "command", command: "awt resume --hook --framed # awt:context" }] }); writeFileSync(settings(t), JSON.stringify(st));
+  const r = await cli(["install"], t.env); assert.equal(r.code, 0); assert.match(r.stdout, /provided by awt/);
+  const after = readJsonFile(settings(t)); assert.equal(mine(after).length, 3); assert.deepEqual(after.hooks.SessionStart.filter((e: any) => e.matcher === "clear"), [awtClear]);
+  const again = await cli(["install"], t.env); assert.match(again.stdout, /unchanged/);
+  const d = await cli(["doctor"], t.env); assert.equal(d.code, 0, d.stdout); assert.match(d.stdout, /SessionStart clear brief provided by awt/);
+  await cli(["install", "--uninstall"], t.env); const un = readJsonFile(settings(t)); assert.equal(mine(un).length, 0); assert.deepEqual(un.hooks.SessionStart.filter((e: any) => e.matcher === "clear"), [awtClear]); t.cleanup();
+});

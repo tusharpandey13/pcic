@@ -40,6 +40,9 @@ export async function runJob(c: JobCtx): Promise<void> {
     a.state = "compact";
     const why = await c.check(a);
     if (why) return abort(why);
+    // run() reports a canceled turn as idle; its turn.after may land only now (R15)
+    const late = job.ownOutcome as { code: string } | null; // set by turn.after while we awaited
+    if (late) { const code = late.code; return done(`checkpoint_failed:${code}`, { event: "checkpoint_failed", reason: code }); }
     if (job.foreign) return abort("user");
     if (now() >= a.deadline) return abort("late"); // R17
     try { store.writePending(a.id, job.id); store.writeJob(a.id, { jobId: job.id, anchor, phase: "compact", startedAt: t0 }); } catch { return abort("state"); }

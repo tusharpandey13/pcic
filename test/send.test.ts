@@ -76,9 +76,9 @@ const cliRig = (script: string, extra: Record<string, unknown> = {}) => {
   const dir = fakeBin(r.t, "paseo", script.replaceAll("$OUT", out)); writeFileSync(join(r.t.home, "config.json"), JSON.stringify({ staggerSeconds: 0, minContextTokens: 100000, checkpoint: "off", sendMode: "cli", paseoBin: join(dir, "paseo"), ...extra }));
   return { r, out };
 };
-test("T19 cli mode: argv is [agent, send, id, /compact] without a shell, identity vars removed, other env kept", async () => {
+test("T19 cli mode: argv is [agent, send, --behavior, steer, id, /compact] without a shell, identity vars removed, other env kept", async () => {
   const { r, out } = cliRig('for a in "$@"; do printf "%s\\n" "$a"; done > $OUT/argv; env > $OUT/env'); await idleAgent(r, "a"); r.clock.set(T0 + DUE + 1000); await r.sweep(); await r.run(); await waitFor(() => events(r).some((e) => e.startsWith("compact")));
-  assert.deepEqual(readFileSync(join(out, "argv"), "utf8").trim().split("\n"), ["agent", "send", "a", "/compact"]); const env = readFileSync(join(out, "env"), "utf8");
+  assert.deepEqual(readFileSync(join(out, "argv"), "utf8").trim().split("\n"), ["agent", "send", "--behavior", "steer", "a", "/compact"]); const env = readFileSync(join(out, "env"), "utf8");
   assert.ok(!/^PASEO_AGENT_ID=/m.test(env) && !/^PASEO_AGENT_CWD=/m.test(env) && !/^PASEO_WORKSPACE_ID=/m.test(env)); assert.match(env, /^KEEP_ME=yes$/m); assert.match(env, /^PCIC_HOME=/m); assert.deepEqual(r.paseo.sent, []); r.cleanup();
 });
 test("T19/C14 cli failures: exit 1, exit 2 with stderr only, a missing binary and a hang all give send_failed and no retry", async () => {

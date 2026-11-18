@@ -108,3 +108,8 @@ test("C6 awt printing 50 KB of garbage: the awt-aware text, capped", async () =>
   const r = await hook("PreCompact", {}, { ...t.env, PATH: `${bin}:${t.env.PATH}`, AWT_DIR: join(t.dir, "awt") }); assert.equal(r.code, 0); assert.match(r.stdout, /keeps an awt record/); assert.ok(r.stdout.length <= 2001); t.cleanup();
 });
 void statSync; void truncateSync; void readFileSync;
+test("T24 a <synthetic> assistant entry (API error stand-in, zero usage) is not the last request", async () => {
+  const { scan } = await import("../hook/transcript.mjs");
+  const s = scan([asst({ at: T0, tokens: 200000, uuid: "real" }), JSON.stringify({ type: "assistant", uuid: "syn", timestamp: new Date(T0 + 60e3).toISOString(), isSidechain: false, message: { model: "<synthetic>", usage: { input_tokens: 0, output_tokens: 0, cache_read_input_tokens: 0, cache_creation_input_tokens: 0 } } })]);
+  assert.equal(s.last?.uuid, "real"); assert.equal(s.last?.contextTokens, 200000);
+});
