@@ -44,7 +44,7 @@ export function scan(lines) {
     const at = ms(e.timestamp);
     const parts = [u.input_tokens, u.cache_read_input_tokens, u.cache_creation_input_tokens].map((x) => (x === undefined ? 0 : num(x)));
     const ctx = parts.some((x) => x === null) ? null : parts[0] + parts[1] + parts[2];
-    last = { uuid: typeof e.uuid === "string" ? e.uuid : null, at, model: typeof e.message?.model === "string" ? e.message.model : null, contextTokens: ctx };
+    last = { text: Array.isArray(e.message?.content) ? e.message.content.filter((c) => c?.type === "text" && typeof c.text === "string").map((c) => c.text).join("") : typeof e.message?.content === "string" ? e.message.content : "", uuid: typeof e.uuid === "string" ? e.uuid : null, at, model: typeof e.message?.model === "string" ? e.message.model : null, contextTokens: ctx };
     const cc = u.cache_creation;
     if (cc && typeof cc === "object") {
       if (num(cc.ephemeral_1h_input_tokens) > 0) ttlObserved = 3600;

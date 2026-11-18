@@ -20,9 +20,12 @@ async function stop(input, env, _cfg, home) {
   const file = join(home, "sessions", `${safeName(env.PASEO_AGENT_ID)}.json`);
   const prev = readJson(file);
   let { last, ttlObserved } = await readTail(input.transcript_path);
-  // Claude Code runs Stop before it flushes the turn's last assistant entry (seen live, V4): wait up to 2 s for a new one.
+  // Claude Code runs Stop before it flushes the turn's last assistant entry (seen live, V4): wait up to 2 s until the newest
+  // entry carries the turn's final text (`last_assistant_message`), or, for a turn with no text, until it differs from the previous record's.
   if (typeof input.last_assistant_message === "string") {
-    for (let i = 0; i < 40 && (!last || last.uuid === prev?.lastAssistantUuid); i++) { await new Promise((r) => setTimeout(r, 50)); ({ last, ttlObserved } = await readTail(input.transcript_path)); }
+    const want = input.last_assistant_message.trim();
+    const settled = () => last && (want ? last.text.trim() === want : last.uuid !== prev?.lastAssistantUuid);
+    for (let i = 0; i < 40 && !settled(); i++) { await new Promise((r) => setTimeout(r, 50)); ({ last, ttlObserved } = await readTail(input.transcript_path)); }
   }
   if (!last || last.at === null) return PASS;
   let awtDir = null;

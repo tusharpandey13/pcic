@@ -62,6 +62,14 @@ test("T24 Stop waits for the assistant entry Claude Code flushes after the hook 
   const r = await hook("Stop", { ...stopIn(p), last_assistant_message: "ok" }, t.env);
   assert.equal(r.code, 0); assert.equal(readJsonFile(join(t.home, "sessions", "agt_0001.json")).lastAssistantUuid, "new"); t.cleanup();
 });
+test("T24 Stop waits for the turn's final text, not just any newer entry (tool turns flush in several entries)", async () => {
+  const t = tmp(); const p = transcript(t, [asst({ at: T0, uuid: "old" })]);
+  const withText = (at: number, uuid: string, text: string, tokens: number) => JSON.stringify({ ...JSON.parse(asst({ at, uuid, tokens })), message: { ...JSON.parse(asst({ at, uuid, tokens })).message, content: [{ type: "text", text }] } });
+  appendFileSync(p, withText(T0 + MIN, "tool", "", 40000) + "\n");
+  setTimeout(() => appendFileSync(p, withText(T0 + 2 * MIN, "final", "all done", 55000) + "\n"), 400);
+  const r = await hook("Stop", { ...stopIn(p), last_assistant_message: "all done" }, t.env);
+  assert.equal(r.code, 0); const rec = readJsonFile(join(t.home, "sessions", "agt_0001.json")); assert.equal(rec.lastAssistantUuid, "final"); assert.equal(rec.contextTokens, 55000); t.cleanup();
+});
 test("T24 Stop gives up after about 2 s when no new assistant entry appears, and keeps the record", async () => {
   const t = tmp(); const p = transcript(t, [asst({ at: T0, uuid: "old" })]);
   await hook("Stop", stopIn(p), t.env);
