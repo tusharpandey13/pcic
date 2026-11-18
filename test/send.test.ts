@@ -34,7 +34,7 @@ test("T17 a queued job delays the self-test", async () => {
 // T18 (R23), C19
 const probe = async (setup: (r: Rig) => void) => { const r = rig({ noVerdict: true }); setup(r); await r.pcic.start(r.paseo); r.clock.set(T0 + 61_000); await r.sweep(); await r.sweep(); return r; };
 test("T18 recorded probe timelines: plain, enveloped, assistant reply", async () => {
-  const plain = await probe((r) => (r.paseo.probeTimeline = [{ item: { type: "user_message", text: "/compact" } }, { item: { type: "error", text: "Not enough messages to compact" } }]));
+  const plain = await probe((r) => (r.paseo.probeTimeline = [{ item: { type: "user_message", text: "/compact" } }, { item: { type: "assistant_message", text: "Error: No messages to compact" } }])); // the recorded live timeline: the local command answers with an Error: row
   assert.equal(readJsonFile(join(plain.t.home, "verdict.json")).mode, "plugin"); assert.deepEqual(plain.paseo.archived, ["probe_1"]);
   const env = await probe((r) => (r.paseo.probeTimeline = [{ item: { type: "user_message", text: "<paseo-system>from X</paseo-system>\n/compact" } }]));
   assert.equal(readJsonFile(join(env.t.home, "verdict.json")).mode, "cli"); assert.deepEqual(env.paseo.archived, ["probe_1"]);

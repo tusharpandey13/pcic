@@ -127,7 +127,7 @@ export function judge(page: unknown): Mode {
     if (Array.isArray(v)) return v.forEach((x) => walk(x, depth + 1));
     const o = v as Record<string, unknown>;
     if (o.type === "user_message" && typeof o.text === "string" && o.text.includes(ENVELOPE)) envelope = true;
-    else if (o.type === "assistant_message" && typeof o.text === "string" && o.text.trim()) reply = true;
+    else if (o.type === "assistant_message" && typeof o.text === "string" && o.text.trim() && !o.text.startsWith("Error:")) reply = true; // an empty probe session answers with the local "Error: No messages to compact" (seen live)
     else Object.values(o).forEach((x) => walk(x, depth + 1));
   };
   walk(page, 0);
