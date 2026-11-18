@@ -119,7 +119,7 @@ Budget: at most 2.5 times the build cost per case, and at most 20 builds per ful
 | E16 | R10 | A parent claude agent creates a subagent through Paseo; both idle past due; the parent is below the threshold | The subagent gets `skipped(subagent)` |
 | E17 | R11, R20 | After E3, restart the daemon and wait past the old due | No second job for the old anchor (the claim exists); no send |
 | E18 | R10 (V6) | Build context; the prompt ends by starting `sleep 900` with Bash `run_in_background` | `skipped` with reason `background_work`; no checkpoint, no `/compact`, no boundary. Written, not yet run live |
-| E19 | R10, R15 (V6, C15) | Agent in mode `default` asks permission for a Bash call after the context is built | No send while the request is pending; the request is not answered; no `checkpoint_ok` or `compacted`. Written, not yet run live |
+| E19 | R10, R15 (V6, C15) | Agent in mode `default` asks permission for a Bash call that is not auto-allowed (`touch zqx-perm-1.txt`; `echo` is auto-allowed and never pends) after the context is built | No send while the request is pending; the request is not answered; no `checkpoint_ok` or `compacted`. Passed live 18-Nov-2026 |
 
 ### Live run notes (18-Nov-2026, Paseo 0.16.1, haiku-class, est. $0.6 + $0.4 reruns)
 
