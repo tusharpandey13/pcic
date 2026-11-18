@@ -17,10 +17,14 @@ const safeName = (s) => String(s).replace(/[^A-Za-z0-9._-]/g, "_").slice(0, 120)
 /** R29 */
 async function stop(input, env, _cfg, home) {
   if (typeof input.transcript_path !== "string") return PASS;
-  const { last, ttlObserved } = await readTail(input.transcript_path);
-  if (!last || last.at === null) return PASS;
   const file = join(home, "sessions", `${safeName(env.PASEO_AGENT_ID)}.json`);
   const prev = readJson(file);
+  let { last, ttlObserved } = await readTail(input.transcript_path);
+  // Claude Code runs Stop before it flushes the turn's last assistant entry (seen live, V4): wait up to 2 s for a new one.
+  if (typeof input.last_assistant_message === "string") {
+    for (let i = 0; i < 40 && (!last || last.uuid === prev?.lastAssistantUuid); i++) { await new Promise((r) => setTimeout(r, 50)); ({ last, ttlObserved } = await readTail(input.transcript_path)); }
+  }
+  if (!last || last.at === null) return PASS;
   let awtDir = null;
   try { if (env.AWT_DIR && statSync(env.AWT_DIR).isDirectory()) awtDir = env.AWT_DIR; } catch {}
   atomicWrite(file, JSON.stringify({

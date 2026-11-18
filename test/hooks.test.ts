@@ -55,6 +55,19 @@ test("T24 a 30 MB transcript is read in its last 2 MB only, in under 300 ms (plu
   const r = await hook("Stop", stopIn(p), t.env);
   assert.equal(r.code, 0); assert.equal(readJsonFile(join(t.home, "sessions", "agt_0001.json")).lastAssistantUuid, "tail"); assert.ok(r.ms < 1500, `${r.ms}`); t.cleanup();
 });
+test("T24 Stop waits for the assistant entry Claude Code flushes after the hook starts (found live, V4)", async () => {
+  const t = tmp(); const p = transcript(t, [asst({ at: T0, uuid: "old" })]);
+  await hook("Stop", stopIn(p), t.env); assert.equal(readJsonFile(join(t.home, "sessions", "agt_0001.json")).lastAssistantUuid, "old");
+  setTimeout(() => appendFileSync(p, asst({ at: T0 + MIN, uuid: "new" }) + "\n"), 400);
+  const r = await hook("Stop", { ...stopIn(p), last_assistant_message: "ok" }, t.env);
+  assert.equal(r.code, 0); assert.equal(readJsonFile(join(t.home, "sessions", "agt_0001.json")).lastAssistantUuid, "new"); t.cleanup();
+});
+test("T24 Stop gives up after about 2 s when no new assistant entry appears, and keeps the record", async () => {
+  const t = tmp(); const p = transcript(t, [asst({ at: T0, uuid: "old" })]);
+  await hook("Stop", stopIn(p), t.env);
+  const r = await hook("Stop", { ...stopIn(p), last_assistant_message: "ok" }, t.env);
+  assert.equal(r.code, 0); assert.ok(r.ms < 4000, `${r.ms}`); assert.equal(readJsonFile(join(t.home, "sessions", "agt_0001.json")).lastAssistantUuid, "old"); t.cleanup();
+});
 test("T24 non-UTF-8 bytes in the transcript do not stop the parse", async () => {
   const t = tmp(); const p = join(t.dir, "bin.jsonl"); writeFileSync(p, Buffer.concat([Buffer.from([0xff, 0xfe, 0x80, 10]), Buffer.from(asst({ at: T0, uuid: "ok" }) + "\n")]));
   await hook("Stop", stopIn(p), t.env); assert.equal(readJsonFile(join(t.home, "sessions", "agt_0001.json")).lastAssistantUuid, "ok"); t.cleanup();
