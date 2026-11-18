@@ -109,7 +109,7 @@ test("C6 awt printing 50 KB of garbage: the awt-aware text, capped", async () =>
 });
 void statSync; void truncateSync; void readFileSync;
 test("T24 a <synthetic> assistant entry (API error stand-in, zero usage) is not the last request", async () => {
-  const { scan } = await import("../hook/transcript.mjs");
+  const { scan } = await import("../shared/transcript.mjs");
   const s = scan([asst({ at: T0, tokens: 200000, uuid: "real" }), JSON.stringify({ type: "assistant", uuid: "syn", timestamp: new Date(T0 + 60e3).toISOString(), isSidechain: false, message: { model: "<synthetic>", usage: { input_tokens: 0, output_tokens: 0, cache_read_input_tokens: 0, cache_creation_input_tokens: 0 } } })]);
   assert.equal(s.last?.uuid, "real"); assert.equal(s.last?.contextTokens, 200000);
 });

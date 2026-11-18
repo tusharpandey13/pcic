@@ -12,7 +12,7 @@ Claude Code has its own idle compaction for this, but it runs only in terminal, 
 
 ### What one return costs
 
-The prices are the table in [`hook/common.mjs`](hook/common.mjs) (`PRICES`, $ per million tokens, from the Anthropic pricing page on 18-Nov-2026). For `opus-5-5`: input $4, 1h cache write $8, cache read $0.20, output $20.
+The prices are the table in [`shared/common.mjs`](shared/common.mjs) (`PRICES`, $ per million tokens, from the Anthropic pricing page on 18-Nov-2026). For `opus-5-5`: input $4, 1h cache write $8, cache read $0.20, output $20.
 
 A 200K-token context, coming back after two hours:
 

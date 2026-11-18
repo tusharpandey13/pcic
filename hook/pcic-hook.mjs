@@ -3,8 +3,8 @@
 import { execFile } from "node:child_process";
 import { readdirSync, rmSync, statSync } from "node:fs";
 import { join } from "node:path";
-import { atomicWrite, createExcl, hookActive, loadConfig, nowMs, num, pcicHome, priceFor, readJson, record } from "./common.mjs";
-import { readTail } from "./transcript.mjs";
+import { atomicWrite, createExcl, hookActive, loadConfig, nowMs, num, pcicHome, priceFor, readJson, record } from "../shared/common.mjs";
+import { readTail } from "../shared/transcript.mjs";
 
 const PASS = { code: 0, stdout: "", stderr: "" };
 const quiet = () => {};

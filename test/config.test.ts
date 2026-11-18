@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { loadConfig, num } from "../hook/common.mjs";
+import { loadConfig, num } from "../shared/common.mjs";
 import { tmp, writeConfig, rig, settle } from "./harness.js";
 
 // T1 (R43)

@@ -4,7 +4,7 @@ import { accessSync, constants, copyFileSync, existsSync, mkdirSync, readFileSyn
 import { homedir } from "node:os";
 import { basename, dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
-import { loadConfig, pcicHome, readJson } from "../hook/common.mjs";
+import { loadConfig, pcicHome, readJson } from "../shared/common.mjs";
 import { run } from "../hook/pcic-hook.mjs";
 
 const HERE = dirname(fileURLToPath(import.meta.url));

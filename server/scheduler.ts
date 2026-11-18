@@ -2,7 +2,7 @@
 import { randomUUID } from "node:crypto";
 import { statSync } from "node:fs";
 import { join } from "node:path";
-import { loadConfig, num, pcicHome } from "../hook/common.mjs";
+import { loadConfig, num, pcicHome } from "../shared/common.mjs";
 import { makeSender, realTimer, turnUserText, type Handle, type PaseoLike, type Snap, type Timer } from "./send.js";
 import { makeStore, type SessionRecord } from "./store.js";
 import { PAUSE_CODES, type Config } from "./types.js";

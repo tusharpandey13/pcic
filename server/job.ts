@@ -1,5 +1,5 @@
 // One job: checkpoint turn, then /compact (R13..R19, R25). Never retried, never resumed.
-import { readTail } from "../hook/transcript.mjs";
+import { readTail } from "../shared/transcript.mjs";
 import { rows, type Handle, type Mode, type Outcome } from "./send.js";
 import type { Store } from "./store.js";
 import { CHECKPOINT_TEXT, type Config } from "./types.js";

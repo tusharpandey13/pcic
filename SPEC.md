@@ -54,7 +54,8 @@ pcic/
   server/send.ts         send adapter (plugin | cli) and self-test
   server/store.ts        state dir: claims, pending, verdict, pause, history
   hook/pcic-hook.mjs      Stop, PreCompact, UserPromptSubmit
-  hook/transcript.mjs    tail parser shared by hook and plugin
+  shared/common.mjs      helpers for hook, CLI and plugin (the plugin builder accepts only client/, server/, shared/)
+  shared/transcript.mjs  tail parser shared by hook and plugin
   bin/pcic.mjs            install | doctor | hook
   test/                  tier T harness (fake clock, recorded payloads, transcript fixtures), tier E (gated)
 ```
