@@ -1,0 +1,49 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="880" height="210" viewBox="0 0 880 210" role="img" aria-labelledby="t d">
+  <title id="t">pcic</title>
+  <desc id="d">A 60-minute prompt cache cooling from warm to cold after the last turn. pcic compacts at 55 minutes, before the cache expires at 60.</desc>
+  <style>
+    :root { --ink:#1f2328; --muted:#59636e; --rule:#d1d9e0; --warm:#c47f12; --cool:#8aa4bf; --act:#1f7a68; }
+    @media (prefers-color-scheme: dark) {
+      :root { --ink:#e6edf3; --muted:#9198a1; --rule:#3d444d; --warm:#e0a43c; --cool:#5d7896; --act:#4cb89f; }
+    }
+    text { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif; fill: var(--ink); }
+    .name { font-size: 54px; font-weight: 700; letter-spacing: -1.5px; }
+    .sub { font-size: 17px; fill: var(--muted); }
+    .tick { font-size: 12px; fill: var(--muted); font-variant-numeric: tabular-nums; }
+    .lbl { font-size: 13px; }
+    .act { fill: var(--act); font-weight: 600; }
+    .w { stop-color: var(--warm); }
+    .c { stop-color: var(--cool); }
+    .rule { stroke: var(--rule); stroke-width: 1; }
+    .mark { stroke: var(--act); stroke-width: 2; }
+    .exp { stroke: var(--muted); stroke-width: 1.5; stroke-dasharray: 3 3; }
+  </style>
+  <defs>
+    <linearGradient id="heat" x1="0" x2="1" y1="0" y2="0">
+      <stop offset="0" class="w"/>
+      <stop offset="0.75" class="w" stop-opacity="0.75"/>
+      <stop offset="1" class="c"/>
+    </linearGradient>
+  </defs>
+
+  <text x="40" y="76" class="name">pcic</text>
+  <text x="40" y="110" class="sub">Compacts idle Claude Code agents in Paseo while their prompt cache is still warm.</text>
+
+  <!-- 0..60 min mapped to x 40..840 (13.33 px/min) -->
+  <rect x="40" y="146" width="800" height="18" rx="2" fill="url(#heat)"/>
+  <line x1="40" y1="168" x2="840" y2="168" class="rule"/>
+  <line x1="40" y1="166" x2="40" y2="172" class="rule"/>
+  <line x1="240" y1="166" x2="240" y2="172" class="rule"/>
+  <line x1="440" y1="166" x2="440" y2="172" class="rule"/>
+  <line x1="640" y1="166" x2="640" y2="172" class="rule"/>
+  <text x="40" y="188" class="tick">last turn</text>
+  <text x="240" y="188" class="tick" text-anchor="middle">15 min</text>
+  <text x="440" y="188" class="tick" text-anchor="middle">30 min</text>
+  <text x="640" y="188" class="tick" text-anchor="middle">45 min</text>
+
+  <line x1="773" y1="134" x2="773" y2="172" class="mark"/>
+  <text x="764" y="130" class="lbl act" text-anchor="end">55 min: checkpoint, then /compact</text>
+
+  <line x1="840" y1="142" x2="840" y2="172" class="exp"/>
+  <text x="840" y="188" class="tick" text-anchor="end">60 min: cache expires</text>
+</svg>

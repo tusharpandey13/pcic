@@ -1,0 +1,70 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="880" height="330" viewBox="0 0 880 330" role="img" aria-labelledby="t d">
+  <title id="t">How pcic works: one idle period</title>
+  <desc id="d">Two lanes over two hours. Without pcic, the 200K context sits until the cache expires at 60 minutes, and the return at 2 hours rewrites all 200K tokens. With pcic, a checkpoint turn and /compact run at 55 minutes while the cache is warm, so the return at 2 hours writes about 15K tokens.</desc>
+  <style>
+    :root { --ink:#1f2328; --muted:#59636e; --rule:#d1d9e0; --warm:#c47f12; --cool:#8aa4bf; --act:#1f7a68; --cost:#b42318; }
+    @media (prefers-color-scheme: dark) {
+      :root { --ink:#e6edf3; --muted:#9198a1; --rule:#3d444d; --warm:#e0a43c; --cool:#5d7896; --act:#4cb89f; --cost:#f47067; }
+    }
+    text { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif; fill: var(--ink); font-size: 13px; }
+    .lane { font-size: 14px; font-weight: 600; }
+    .muted { fill: var(--muted); }
+    .tick { font-size: 12px; fill: var(--muted); font-variant-numeric: tabular-nums; }
+    .act { fill: var(--act); }
+    .cost { fill: var(--cost); font-weight: 600; }
+    .w { stop-color: var(--warm); }
+    .c { stop-color: var(--cool); }
+    .rule { stroke: var(--rule); stroke-width: 1; }
+    .cold { stroke: var(--cool); stroke-width: 1.5; stroke-dasharray: 4 4; fill: none; }
+    .mark { stroke: var(--act); stroke-width: 2; }
+    .ret { stroke: var(--ink); stroke-width: 2; }
+    .dot { fill: var(--ink); }
+    .adot { fill: var(--act); }
+  </style>
+  <defs>
+    <linearGradient id="heat" x1="0" x2="1">
+      <stop offset="0" class="w"/>
+      <stop offset="0.8" class="w" stop-opacity="0.7"/>
+      <stop offset="1" class="c"/>
+    </linearGradient>
+  </defs>
+
+  <!-- time axis: 0..120 min mapped to x 70..790 (6 px/min) -->
+  <line x1="70" y1="292" x2="800" y2="292" class="rule"/>
+  <text x="70" y="312" class="tick" text-anchor="middle">0</text>
+  <text x="250" y="312" class="tick" text-anchor="middle">30 min</text>
+  <text x="430" y="312" class="tick" text-anchor="middle">1 h</text>
+  <text x="610" y="312" class="tick" text-anchor="middle">1 h 30</text>
+  <text x="790" y="312" class="tick" text-anchor="middle">2 h</text>
+  <line x1="430" y1="40" x2="430" y2="292" class="rule" stroke-dasharray="2 3"/>
+  <text x="434" y="36" class="tick">cache expires (1 h TTL)</text>
+
+  <text x="20" y="26" class="muted">Band height is context size; colour is cache warmth.</text>
+
+  <!-- Lane 1: without pcic -->
+  <text x="20" y="74" class="lane">Without pcic</text>
+  <rect x="70" y="88" width="360" height="22" fill="url(#heat)"/>
+  <rect x="430" y="88" width="360" height="22" class="cold"/>
+  <circle cx="70" cy="99" r="4" class="dot"/>
+  <text x="70" y="130" class="muted">last turn, 200K context</text>
+  <line x1="790" y1="80" x2="790" y2="118" class="ret"/>
+  <text x="784" y="130" text-anchor="end">you return:</text>
+  <text x="784" y="148" text-anchor="end" class="cost">200K tokens rewritten as a cache write</text>
+
+  <!-- Lane 2: with pcic -->
+  <text x="20" y="184" class="lane">With pcic</text>
+  <rect x="70" y="198" width="330" height="22" fill="url(#heat)"/>
+  <!-- after compaction: about 15K, fresh 1 h cache from the compact turn -->
+  <rect x="400" y="206" width="390" height="6" fill="url(#heat)" opacity="0.9"/>
+  <circle cx="70" cy="209" r="4" class="dot"/>
+  <text x="70" y="240" class="muted">last turn</text>
+
+  <line x1="400" y1="190" x2="400" y2="228" class="mark"/>
+  <circle cx="400" cy="190" r="4" class="adot"/>
+  <text x="392" y="178" text-anchor="end" class="act">1. checkpoint turn: awt state, decide, note</text>
+  <text x="408" y="244" class="act">2. /compact: summary + awt brief, ~15K</text>
+
+  <line x1="790" y1="190" x2="790" y2="228" class="ret"/>
+  <text x="784" y="266" text-anchor="end">3. you return: the small context is written</text>
+  <text x="784" y="284" text-anchor="end" class="muted">55 min = ttlSeconds 3600 minus 300</text>
+</svg>

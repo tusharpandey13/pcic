@@ -1,0 +1,83 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="880" height="400" viewBox="0 0 880 400" role="img" aria-labelledby="t d">
+  <title id="t">pcic architecture</title>
+  <desc id="d">The pcic plugin runs inside the Paseo daemon and sends a checkpoint and /compact to idle Claude Code agents. Claude Code hooks in each agent write a session record to the pcic state directory, add summary instructions, and guard cold returns. awt holds the task record and re-injects the brief after compaction.</desc>
+  <style>
+    :root { --ink:#1f2328; --muted:#59636e; --rule:#d1d9e0; --box:#f6f8fa; --edge:#afb8c1; --act:#1f7a68; --warm:#c47f12; }
+    @media (prefers-color-scheme: dark) {
+      :root { --ink:#e6edf3; --muted:#9198a1; --rule:#3d444d; --box:#161b22; --edge:#3d444d; --act:#4cb89f; --warm:#e0a43c; }
+    }
+    text { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif; fill: var(--ink); font-size: 13px; }
+    .h { font-size: 15px; font-weight: 600; }
+    .k { font-size: 13px; font-weight: 600; }
+    .muted { fill: var(--muted); }
+    .act { fill: var(--act); }
+    .warm { fill: var(--warm); }
+    .frame { fill: none; stroke: var(--edge); stroke-width: 1.25; }
+    .card { fill: var(--box); stroke: var(--edge); stroke-width: 1.25; }
+    .plug { fill: var(--box); stroke: var(--act); stroke-width: 2; }
+    .flow { stroke: var(--act); stroke-width: 1.75; fill: none; marker-end: url(#a); }
+    .flow2 { stroke: var(--warm); stroke-width: 1.75; fill: none; marker-end: url(#w); }
+    .flow3 { stroke: var(--muted); stroke-width: 1.5; fill: none; stroke-dasharray: 4 3; marker-end: url(#m); }
+    .ha { fill: var(--act); } .hw { fill: var(--warm); } .hm { fill: var(--muted); }
+  </style>
+  <defs>
+    <marker id="a" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" class="ha"/></marker>
+    <marker id="w" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" class="hw"/></marker>
+    <marker id="m" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" class="hm"/></marker>
+  </defs>
+
+  <!-- Paseo daemon -->
+  <rect x="20" y="20" width="270" height="250" rx="10" class="frame"/>
+  <text x="38" y="46" class="h">Paseo daemon</text>
+  <rect x="38" y="62" width="234" height="190" rx="6" class="plug"/>
+  <text x="54" y="88" class="k act">pcic plugin</text>
+  <text x="54" y="114">sweeper, every 30 s</text>
+  <text x="54" y="136">job queue: 2 at once, 30 per hour</text>
+  <text x="54" y="158">job: checkpoint, then /compact</text>
+  <text x="54" y="180">send adapter: plugin or CLI</text>
+  <text x="54" y="202">self-test, once per Paseo version</text>
+  <text x="54" y="232" class="muted">sends only when the agent is idle</text>
+
+  <!-- Claude Code agent -->
+  <rect x="340" y="20" width="270" height="250" rx="10" class="frame"/>
+  <text x="358" y="46" class="h">Claude Code agent</text>
+  <text x="358" y="64" class="muted">Agent SDK session launched by Paseo</text>
+  <rect x="358" y="80" width="234" height="172" rx="6" class="card"/>
+  <text x="374" y="104" class="k">hooks (pcic hook &lt;event&gt;)</text>
+  <text x="374" y="130">Stop: session record</text>
+  <text x="374" y="152">PreCompact: summary note</text>
+  <text x="374" y="174">UserPromptSubmit: cold guard</text>
+  <text x="374" y="196">SessionStart (clear): awt brief</text>
+  <text x="374" y="232" class="muted">all exit 0 on any error</text>
+
+  <!-- awt -->
+  <rect x="660" y="20" width="200" height="250" rx="10" class="frame"/>
+  <text x="678" y="46" class="h">awt</text>
+  <text x="678" y="64" class="muted">task record, unchanged</text>
+  <text x="678" y="104">goal, state, decisions,</text>
+  <text x="678" y="124">open questions, notes</text>
+  <text x="678" y="164">SessionStart (compact)</text>
+  <text x="678" y="184">hook re-injects the</text>
+  <text x="678" y="204">framed brief</text>
+
+  <!-- flows: plugin to agent -->
+  <path d="M272 120 L356 120" class="flow"/>
+  <text x="314" y="112" class="act" text-anchor="middle" font-size="12">send</text>
+
+  <!-- agent to awt, awt back to agent -->
+  <path d="M592 118 L656 118" class="flow2"/>
+  <text x="624" y="110" class="warm" text-anchor="middle" font-size="12">record</text>
+  <path d="M658 188 L596 188" class="flow2"/>
+  <text x="627" y="208" class="warm" text-anchor="middle" font-size="12">brief</text>
+
+  <!-- state dir -->
+  <rect x="20" y="310" width="590" height="70" rx="10" class="card"/>
+  <text x="38" y="336" class="k">PCIC_HOME</text>
+  <text x="128" y="336" class="muted">~/.local/share/pcic by default</text>
+  <text x="38" y="360">config.json, sessions/, claims/, pending/, guard/, verdict.json, history.jsonl</text>
+
+  <path d="M475 252 L475 306" class="flow3"/>
+  <text x="483" y="288" class="muted" font-size="12">writes</text>
+  <path d="M155 306 L155 274" class="flow3"/>
+  <text x="163" y="294" class="muted" font-size="12">reads</text>
+</svg>
