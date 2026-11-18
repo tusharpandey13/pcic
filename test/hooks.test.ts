@@ -70,6 +70,18 @@ test("T24 Stop waits for the turn's final text, not just any newer entry (tool t
   const r = await hook("Stop", { ...stopIn(p), last_assistant_message: "all done" }, t.env);
   assert.equal(r.code, 0); const rec = readJsonFile(join(t.home, "sessions", "agt_0001.json")); assert.equal(rec.lastAssistantUuid, "final"); assert.equal(rec.contextTokens, 55000); t.cleanup();
 });
+test("T24/E3 Stop: a checkpoint reply identical to an earlier turn's does not match the stale entry; the /compact turn (no assistant text) keeps the post-compaction size", async () => {
+  const t = tmp(); const p = transcript(t, [asst({ at: T0, uuid: "old" })]);
+  const withText = (at: number, uuid: string, text: string, tokens: number) => JSON.stringify({ ...JSON.parse(asst({ at, uuid, tokens })), message: { ...JSON.parse(asst({ at, uuid, tokens })).message, content: [{ type: "text", text }] } });
+  appendFileSync(p, withText(T0 + MIN, "ck1", "checkpoint saved", 150000) + "\n");
+  await hook("Stop", { ...stopIn(p), last_assistant_message: "checkpoint saved" }, t.env); assert.equal(readJsonFile(join(t.home, "sessions", "agt_0001.json")).lastAssistantUuid, "ck1");
+  setTimeout(() => appendFileSync(p, withText(T0 + 2 * MIN, "ck2", "checkpoint saved", 160000) + "\n"), 400);
+  await hook("Stop", { ...stopIn(p), last_assistant_message: "checkpoint saved" }, t.env);
+  let rec = readJsonFile(join(t.home, "sessions", "agt_0001.json")); assert.equal(rec.lastAssistantUuid, "ck2"); assert.equal(rec.contextTokens, 160000);
+  appendFileSync(p, boundary(T0 + 3 * MIN, 160000, 9000) + "\n"); // /compact: a boundary, no assistant entry
+  const r = await hook("Stop", { ...stopIn(p), last_assistant_message: "" }, t.env);
+  rec = readJsonFile(join(t.home, "sessions", "agt_0001.json")); assert.equal(r.code, 0); assert.equal(rec.lastAssistantUuid, "ck2"); assert.equal(rec.contextTokens, 9000); assert.ok(r.ms < 4000, `${r.ms}`); t.cleanup();
+});
 test("T24 Stop gives up after about 2 s when no new assistant entry appears, and keeps the record", async () => {
   const t = tmp(); const p = transcript(t, [asst({ at: T0, uuid: "old" })]);
   await hook("Stop", stopIn(p), t.env);

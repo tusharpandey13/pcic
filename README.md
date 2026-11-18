@@ -144,6 +144,8 @@ rm -rf "${PCIC_HOME:-${XDG_DATA_HOME:-$HOME/.local/share}/pcic}"   # optional: s
 
 **What if the Mac sleeps through the window?** The job is skipped once its deadline passes, and the guard catches your first message instead.
 
+**What happens after a daemon restart?** Paseo 0.16.1 gives a plugin no start event and no client at load, so pcic starts working at the first agent event after the restart (an agent opens, finishes a turn, or asks for a permission). Until then no idle compaction runs. The cold-return guard is a Claude Code hook and works regardless: an agent that went cold meanwhile is blocked once on your next prompt, with the three ways out.
+
 **What is not covered?** Claude Code terminal sessions (native idle compaction handles them), in-session Task subagents, and single turns that run longer than the cache lifetime.
 
 **What is not yet verified?** pcic is version 0.1.0, tested offline against a fake Paseo and recorded transcripts. Some assumptions have not yet been checked against a live daemon. Each has a planned live test (SPEC.md, "Unverified"):

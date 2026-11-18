@@ -86,7 +86,7 @@ function mkBig() {
   return lines.join("\n") + "\n";
 }
 const BUILD = "Read the file big.md in full with the Read tool (page with offset and limit if needed so that you see all of it), then reply with exactly: ready";
-interface Opts { name: string; prompt?: string; awt?: boolean; labels?: string[]; envs?: string[]; provider?: string; decide?: boolean }
+interface Opts { name: string; mode?: string; prompt?: string; awt?: boolean; labels?: string[]; envs?: string[]; provider?: string; decide?: boolean }
 const awtEnv = (dir: string): NodeJS.ProcessEnv => ({ ...env, AWT_DIR: dir, AWT_ROOT: join(tmp, "awt-root") });
 async function mkAwt(name: string, decide = true): Promise<string> {
   const dir = join(tmp, "awt", name); mkdirSync(dir, { recursive: true });
@@ -96,7 +96,7 @@ async function mkAwt(name: string, decide = true): Promise<string> {
 }
 /** Creates an agent and returns its id as soon as it exists (the first prompt keeps running). */
 async function create(o: Opts): Promise<string> {
-  const args = ["run", "--provider", o.provider ?? "claude/haiku", "--mode", "bypassPermissions", "--title", o.name, "--cwd", proj, "--no-wait", "--json"];
+  const args = ["run", "--provider", o.provider ?? "claude/haiku", "--mode", o.mode ?? "bypassPermissions", "--title", o.name, "--cwd", proj, "--no-wait", "--json"];
   if (o.awt) args.push("--env", `AWT_DIR=${await mkAwt(o.name, o.decide ?? true)}`);
   for (const l of o.labels ?? []) args.push("--label", l);
   for (const e of o.envs ?? []) args.push("--env", e);
@@ -206,7 +206,7 @@ test("E2 the self-test records a plugin verdict, archives its probe, the probe s
 });
 
 // ---- phase 1: E3/E14 E4 E5 E6 E7 E11 E15 E16 (concurrent) -----------------------------------------
-test("phase 1 runs E3 E4 E5 E6 E7 E11 E15 E16 together", { skip: !(ON && PAID && wanted("E3", "E4", "E5", "E6", "E7", "E11", "E15", "E16")), timeout: 1_500_000 }, async () => {
+test("phase 1 runs E3 E4 E5 E6 E7 E11 E15 E16 E18 E19 together", { skip: !(ON && PAID && wanted("E3", "E4", "E5", "E6", "E7", "E11", "E15", "E16", "E18", "E19")), timeout: 1_500_000 }, async () => {
   setCfg({ sendMode: "plugin" }); // forced plugin: E14 is E3's run
   await phase({
     async E3() {
@@ -260,6 +260,21 @@ test("phase 1 runs E3 E4 E5 E6 E7 E11 E15 E16 together", { skip: !(ON && PAID &&
       const { id } = await built({ name: "e16-child", labels: [`paseo.parent-agent-id=${parent}`] });
       await waitFor("skipped subagent", () => hist(id).find((e) => e.event === "skipped"), 240_000); assert.equal(hist(id).find((e) => e.event === "skipped").reason, "subagent");
       assert.ok(!evs(id).includes("scheduled"));
+    },
+    // V6: backgroundWork is visible on the handle (R10). Written, not yet run live.
+    async E18() {
+      const { id } = await built({ name: "e18", prompt: `${BUILD}. Then start \`sleep 900\` with the Bash tool and run_in_background true, and reply with exactly: started` });
+      await waitFor("skipped background_work", () => hist(id).find((e) => e.event === "skipped" || e.event === "compacted" || e.event === "aborted"), 300_000);
+      const ev = hist(id); assert.ok(ev.some((e) => e.event === "skipped" && e.reason === "background_work"), JSON.stringify(ev.map((e) => [e.event, e.reason])));
+      assert.ok(!(await timeline(id)).some((x) => x.text === "/compact" || x.text.startsWith("[pcic checkpoint]")), "pcic sent into an agent with background work"); assert.equal(boundaryOf(id), null);
+    },
+    // V6, C15: a pending permission request keeps the agent not idle; pcic never answers it.
+    async E19() {
+      const id = await create({ name: "e19", mode: "default", prompt: `${BUILD}. Then run \`echo ZQX-PERM-1\` with the Bash tool and reply with exactly: ok` });
+      await waitFor("permission pending", async () => (j((await pas("permit", "ls", "--json")).out) ?? []).length > 0 || (await status(id)) === "idle", 240_000, 2000);
+      await sleep(200_000);
+      const tl = await timeline(id); assert.ok(!tl.some((x) => x.text === "/compact" || x.text.startsWith("[pcic checkpoint]")), "pcic sent while a permission was pending");
+      assert.notEqual(await status(id), "idle", "the permission was answered by someone"); assert.ok(!evs(id).some((e) => e === "compacted" || e === "checkpoint_ok"));
     },
   });
 });
@@ -347,6 +362,6 @@ test("V5 a send to a closed agent after a restart reads the cache instead of rew
 });
 
 // ---- per-case reports ------------------------------------------------------------------------------
-for (const id of ["E3", "E4", "E5", "E6", "E7", "E8", "E9", "E10", "E11", "E12", "E13", "E15", "E16", "E17"]) test(`${id} (see E2E-RUBRIC.md)`, { skip: !(ON && PAID) }, verdictOf(id));
+for (const id of ["E3", "E4", "E5", "E6", "E7", "E8", "E9", "E10", "E11", "E12", "E13", "E15", "E16", "E17", "E18", "E19"]) test(`${id} (see E2E-RUBRIC.md)`, { skip: !(ON && PAID) }, verdictOf(id));
 test("E14 plugin mode is E3's forced-plugin run", { skip: !(ON && PAID && wanted("E3")) }, () => { assert.ok(results.get("E3")?.ok, "E3 failed"); });
 test("spend summary", { skip: !(ON && PAID) }, () => { logLine(`TOTAL est. spend $${spend(true).toFixed(3)} (cap $${CAP})`); assert.ok(spend() <= CAP); });

@@ -39,6 +39,8 @@ The only expensive event is a request against a large context whose cache has ex
 
 The plugin SDK gives the server entry no Paseo client; a hook context does. So the start-up rebuild (R37) and the sweeper begin at the first hook event after the plugin starts. That client is the plugin process's single long-lived one, so keeping it is safe.
 
+**Limitation after a daemon restart.** Checked against the Paseo 0.16.1 plugin SDK types and the app bundle (18-Nov): there is no start, ready or daemon-boot hook. The hook names are `workspace.create/archive`, `worktree.create`, `agent.create/open/close/archive/turn/permission` and nothing else; a server entry receives only a `PluginServerContext` with no client; `handle()` RPCs and subscriptions and `registerSettings` give a client only when someone calls them. So after a restart nothing runs until an agent opens, finishes a turn, asks for a permission or is created. The cold-return guard (R31..R34) is a Claude Code hook and does not depend on the plugin, so it covers that window: an agent that went cold in the meantime is blocked once on the owner's next prompt. Revisit when the SDK adds a start hook.
+
 There is no client UI in v1. The checkpoint prompt and `/compact` are visible in the chat, and the guard's message shows there too.
 
 ## File layout
@@ -271,7 +273,7 @@ Known interaction: after the `/compact` turn, the awt plugin's stand-in handoff 
 | V3 | Prompts typed in the Paseo app carry no `<paseo-system>` envelope | E8 |
 | V4 | `Stop` fires in Paseo sessions, and `PASEO_AGENT_ID` is in the hook env | E1, E3 |
 | V5 | `send` to a closed (not archived) agent after a daemon restart resumes it without an extra request | E12 (confirmed 18-Nov: the request read 57K from the cache and wrote 0.4K) |
-| V6 | `backgroundWork` and pending permissions are visible on the agent handle | E7, C15 |
+| V6 | `backgroundWork` and pending permissions are visible on the agent handle | E18, E19, C15 (offline: the three `V6` tests in `test/scheduler.test.ts`, with fakes) |
 | V7 | `compact_boundary` transcript entries carry `compactMetadata.preTokens` | E3 |
 | V8 | Cost of `/compact` on a cold cache (the guard's second estimate) | E8 (tokens only; no dollar claim tested) |
 | V9 | `paseo agent send` from the plugin env targets the plugin's own daemon (`PASEO_HOME`) | E13 |

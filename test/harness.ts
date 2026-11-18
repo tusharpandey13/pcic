@@ -11,14 +11,25 @@ export const BIN = join(ROOT, "bin", "pcic.mjs");
 export const T0 = Date.parse("2026-11-18T09:00:00Z");
 export const MIN = 60_000;
 
+const made = new Set<string>();
+/** Removes a temp tree even when a test left a directory read-only. */
+function wipe(d: string) {
+  const open = (p: string) => { try { chmodSync(p, 0o700); for (const f of readdirSync(p, { withFileTypes: true })) if (f.isDirectory()) open(join(p, f.name)); } catch {} };
+  try { rmSync(d, { recursive: true, force: true }); } catch {}
+  if (existsSync(d)) { open(d); rmSync(d, { recursive: true, force: true }); }
+}
+// A test that fails before its own cleanup() still leaves nothing behind: every file runs in its own process.
+process.on("exit", () => { for (const d of made) wipe(d); });
+
 export interface Tmp { dir: string; home: string; claude: string; env: Record<string, string>; cleanup(): void }
 /** A temp HOME with its own PCIC_HOME and Claude config dir. Nothing outside it is touched. */
 export function tmp(extra: Record<string, string> = {}): Tmp {
   const dir = realpathSync(mkdtempSync(join(tmpdir(), "pcic-")));
+  made.add(dir);
   const home = join(dir, "pcic-home"), claude = join(dir, "claude");
   mkdirSync(claude, { recursive: true });
   const env: Record<string, string> = { PATH: process.env.PATH ?? "", HOME: dir, PCIC_HOME: home, CLAUDE_CONFIG_DIR: claude, PASEO_AGENT_ID: "agt_0001", ...extra };
-  return { dir, home, claude, env, cleanup: () => rmSync(dir, { recursive: true, force: true }) };
+  return { dir, home, claude, env, cleanup: () => { wipe(dir); made.delete(dir); } };
 }
 export const writeConfig = (t: Tmp, cfg: unknown) => { mkdirSync(t.home, { recursive: true }); writeFileSync(join(t.home, "config.json"), typeof cfg === "string" ? cfg : JSON.stringify(cfg)); };
 export const readJsonFile = (p: string) => JSON.parse(readFileSync(p, "utf8"));

@@ -21,10 +21,10 @@ async function stop(input, env, _cfg, home) {
   const prev = readJson(file);
   let { last, ttlObserved } = await readTail(input.transcript_path);
   // Claude Code runs Stop before it flushes the turn's last assistant entry (seen live, V4): wait up to 2 s until the newest
-  // entry carries the turn's final text (`last_assistant_message`), or, for a turn with no text, until it differs from the previous record's.
+  // entry is new (not the previous record's) and carries the turn's final text (`last_assistant_message`; an identical reply to an earlier turn must not match a stale entry).
   if (typeof input.last_assistant_message === "string") {
     const want = input.last_assistant_message.trim();
-    const settled = () => last && (want ? last.text.trim() === want : last.uuid !== prev?.lastAssistantUuid);
+    const settled = () => last && last.uuid !== prev?.lastAssistantUuid && (!want || last.text.trim() === want);
     for (let i = 0; i < 40 && !settled(); i++) { await new Promise((r) => setTimeout(r, 50)); ({ last, ttlObserved } = await readTail(input.transcript_path)); }
   }
   if (!last || last.at === null) return PASS;

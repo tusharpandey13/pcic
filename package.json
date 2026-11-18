@@ -8,7 +8,7 @@
   "bin": { "pcic": "bin/pcic.mjs" },
   "scripts": {
     "typecheck": "tsc --noEmit",
-    "test": "tsc --noEmit && node --import tsx --test --test-concurrency=4 test/*.test.ts",
+    "test": "tsc --noEmit && node test/leakcheck.mjs",
     "test:e2e": "PCIC_E2E=1 node --import tsx --test --test-timeout=900000 test/e2e/*.test.ts"
   },
   "dependencies": { "@getpaseo/plugin": "0.16.1" },

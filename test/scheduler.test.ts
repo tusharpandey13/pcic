@@ -119,6 +119,27 @@ test("T8 excluded by id and by cwd prefix; paused; includeSubagents allows a chi
   const r2 = rig(); await idleAgent(r2, "a"); mkdirSync(r2.t.home, { recursive: true }); writeFileSync(join(r2.t.home, "pause.json"), JSON.stringify({ until: T0 + 99 * 3600e3, reason: "rate_limit" })); await goDue(r2); assert.deepEqual(r2.paseo.sent, []); assert.equal(r2.pcic.state("a")!.result, "paused"); r2.cleanup();
   const r3 = rig({ cfg: { includeSubagents: true } }); await idleAgent(r3, "a", { labels: { "paseo.parent-agent-id": "agt_p" } }); await goDue(r3); assert.equal(texts(r3).length, 2); r3.cleanup();
 });
+// ---- V6: backgroundWork and pending permissions, seen through the handle (offline stand-in for the live E18/E19) ----
+test("V6 backgroundWork appearing after queueing aborts before the checkpoint; when it clears the next anchor can run", async () => {
+  const r = rig(); await idleAgent(r, "a"); let n = 0;
+  r.paseo.onRefresh = (id) => { if (++n === 3) r.paseo.agents_.get(id)!.snap.backgroundWork = { count: 2 }; }; // sweep, dequeue, job
+  await goDue(r); assert.deepEqual(r.paseo.sent, []); assert.deepEqual(events(r, "a"), ["scheduled", "aborted:background_work"]);
+  r.paseo.onRefresh = () => {}; r.paseo.agents_.get("a")!.snap.backgroundWork = { count: 0 };
+  r.clock.set(T0 + 2 * 3600e3); await r.turn("a"); r.clock.set(T0 + 2 * 3600e3 + DUE + 1000); await r.sweep(); await r.run(); assert.deepEqual(texts(r), [CHECKPOINT_TEXT, "/compact"]); r.cleanup();
+});
+test("V6 a pending permission appearing during the checkpoint turn stops the job before /compact; pcic never answers it", async () => {
+  const r = rig(); await idleAgent(r, "a");
+  r.paseo.onTurnEnd = async (id, text, res) => { r.paseo.agents_.get(id)!.snap.pendingPermissions = [{ id: "perm_1" }]; await call(r, id, res); void text; };
+  const call = (rr: Rig, id: string, res: any) => rr.call("agent.turn.after", { agent: agentPayload(id), turnId: "own", outcome: res.status === "idle" ? { kind: "completed" } : { kind: "failed", error: { message: "x", code: res.code } } });
+  await goDue(r); assert.deepEqual(texts(r), [CHECKPOINT_TEXT]); assert.ok(events(r, "a").includes("aborted:not_idle"), events(r, "a").join());
+  assert.deepEqual(r.paseo.perm, []); assert.deepEqual(r.paseo.agents_.get("a")!.snap.pendingPermissions, [{ id: "perm_1" }]); r.cleanup();
+});
+test("V6 a pending permission or backgroundWork at the first sweep keeps the agent from being scheduled into a send", async () => {
+  for (const [reason, snap] of [["not_idle", { pendingPermissions: [{ id: "p" }] }], ["background_work", { backgroundWork: { count: 1 } }]] as const) {
+    const r = rig(); await idleAgent(r, "a"); Object.assign(r.paseo.agents_.get("a")!.snap, snap); await goDue(r); await r.clock.advance(MIN); await r.sweep(); await r.run();
+    assert.deepEqual(r.paseo.sent, [], reason); assert.deepEqual(events(r, "a"), [`skipped:${reason}`], reason); r.cleanup();
+  }
+});
 test("T8/T21 a status flip between the dequeue check and the send (same tick) sends nothing", async () => {
   const r = rig(); await idleAgent(r, "a"); let n = 0; r.paseo.onRefresh = (id) => { if (++n === 3) r.paseo.agents_.get(id)!.snap.status = "running"; }; // sweep, dequeue, job: the third read flips
   await goDue(r); assert.deepEqual(r.paseo.sent, []); assert.ok(events(r, "a").includes("aborted:not_idle")); r.cleanup();
