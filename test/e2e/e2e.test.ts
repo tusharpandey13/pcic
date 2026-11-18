@@ -270,10 +270,10 @@ test("phase 1 runs E3 E4 E5 E6 E7 E11 E15 E16 E18 E19 together", { skip: !(ON &&
     },
     // V6, C15: a pending permission request keeps the agent not idle; pcic never answers it.
     async E19() {
-      const id = await create({ name: "e19", mode: "default", prompt: `${BUILD}. Then run \`echo ZQX-PERM-1\` with the Bash tool and reply with exactly: ok` });
+      const id = await create({ name: "e19", mode: "default", prompt: `${BUILD}. Then run \`touch zqx-perm-1.txt\` with the Bash tool (it writes a file, so Claude Code asks for permission) and reply with exactly: ok` });
       await waitFor("permission pending", async () => (j((await pas("permit", "ls", "--json")).out) ?? []).length > 0 || (await status(id)) === "idle", 240_000, 2000);
       await sleep(200_000);
-      const tl = await timeline(id); assert.ok(!tl.some((x) => x.text === "/compact" || x.text.startsWith("[pcic checkpoint]")), "pcic sent while a permission was pending");
+      const tl = await timeline(id); assert.ok(!tl.some((x) => x.text === "/compact" || x.text.startsWith("[pcic checkpoint]")), `pcic sent while a permission was pending: ${JSON.stringify(tl.slice(-6).map((x) => [x.type, x.text.slice(0, 80)]))} hist=${JSON.stringify(hist(id).map((e) => [e.event, e.reason]))} status=${await status(id)}`);
       assert.notEqual(await status(id), "idle", "the permission was answered by someone"); assert.ok(!evs(id).some((e) => e === "compacted" || e === "checkpoint_ok"));
     },
   });
@@ -282,7 +282,7 @@ test("phase 1 runs E3 E4 E5 E6 E7 E11 E15 E16 E18 E19 together", { skip: !(ON &&
 test("phase 2 runs E8 E9 E10 after a stopped daemon", { skip: !(ON && PAID && wanted("E8", "E9", "E10")), timeout: 1_200_000 }, async () => {
   setCfg({ sendMode: "plugin" });
   const [g1, g2] = await Promise.all([built({ name: "g1" }), built({ name: "g2" })]);
-  const pid = Number(/workerPid:\s*(\d+)/.exec(paseoSync("daemon", "status"))?.[1]); assert.ok(pid > 1, "no worker pid");
+  let pid = 0, st = ""; for (let i = 0; i < 15 && !(pid > 1); i++) { try { st = paseoSync("daemon", "status"); } catch (e: any) { st = String(e?.stdout ?? e); } pid = Number(/workerPid:\s*(\d+)/.exec(st)?.[1]); if (!(pid > 1)) await sleep(2000); } assert.ok(pid > 1, `no worker pid: ${st.slice(0, 400)}`);
   // The whole daemon tree (worker, plugin subprocess, ...) freezes, as a sleeping Mac would; the agents' claude processes stay alive.
   const tree = (p: number): number[] => [p, ...execFileSync("pgrep", ["-P", String(p)], { encoding: "utf8" }).split("\n").filter(Boolean).flatMap((c) => { try { return tree(Number(c)); } catch { return [Number(c)]; } })];
   let pids: number[] = []; try { pids = tree(pid); } catch { pids = [pid]; }
@@ -358,7 +358,8 @@ test("V5 a send to a closed agent after a restart reads the cache instead of rew
   const ctx = sess(id).contextTokens; const n0 = asstCount(id); await pas("agent", "send", id, "ZQX-PROMPT say ok");
   const last = transcript(id).filter((e) => e.type === "assistant" && e.message?.usage).pop().message.usage;
   logLine(`V5 request usage after restart: read=${last.cache_read_input_tokens} write=${last.cache_creation_input_tokens} ctx=${ctx} requests+${asstCount(id) - n0}`);
-  assert.ok(last.cache_read_input_tokens >= 0.8 * ctx && last.cache_creation_input_tokens < 0.2 * ctx, `read ${last.cache_read_input_tokens} write ${last.cache_creation_input_tokens}`);
+  // E12 compacts before this send, so ctx (pre-compaction) is only an upper bound: the request reads the static prefix (~15.7K) and writes the new summary (~11K); a rewrite would write about ctx.
+  assert.ok(last.cache_read_input_tokens >= 10_000 && last.cache_creation_input_tokens < 0.25 * ctx, `read ${last.cache_read_input_tokens} write ${last.cache_creation_input_tokens}`);
 });
 
 // ---- per-case reports ------------------------------------------------------------------------------
