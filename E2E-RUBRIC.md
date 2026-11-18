@@ -119,6 +119,10 @@ Budget: at most 2.5 times the build cost per case, and at most 20 builds per ful
 | E16 | R10 | A parent claude agent creates a subagent through Paseo; both idle past due; the parent is below the threshold | The subagent gets `skipped(subagent)` |
 | E17 | R11, R20 | After E3, restart the daemon and wait past the old due | No second job for the old anchor (the claim exists); no send |
 
+### Live run notes (18-Nov-2026, Paseo 0.16.1, haiku-class, est. $0.6 + $0.4 reruns)
+
+HOME is not redirected (the keychain login is per real HOME); everything else is in a temp dir. The plugin only starts at the first hook event, so E1's agent also starts it. E8 freezes the whole daemon process tree, not only the worker. E10's envelope is a literal `<paseo-system>` in the text (the CLI adds none without identity vars). E16 sets the `paseo.parent-agent-id` label directly. E15 uses awt's fake ACP provider. Re-run selected cases with `PCIC_E2E_ONLY=E8,E11`.
+
 ## Reporting
 
 One line per case: `id PASS|FAIL cost=$x evidence=<dir>`, plus the run total against the cap. A FAIL names the first unmet criterion. The run is green only when every T case passes and every E case that ran passes. A skipped E case is reported as skipped, never as passed.

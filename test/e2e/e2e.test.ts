@@ -338,7 +338,7 @@ test("phase 4 runs E12 and E17 across a daemon restart", { skip: !(ON && PAID &&
   });
 });
 // V5 probe on its own: send to a closed agent and look at the cache numbers of that request.
-test("V5 a send to a closed agent after a restart reads the cache instead of rewriting it", { skip: !(ON && PAID), timeout: 300_000 }, async () => {
+test("V5 a send to a closed agent after a restart reads the cache instead of rewriting it", { skip: !(ON && PAID && wanted("E12")), timeout: 300_000 }, async () => {
   const r = results.get("E12"); const id = (j((await pas("agent", "ls", "-a", "--json")).out) ?? []).find((a: any) => a.name === "e12")?.id; assert.ok(id && r, "no e12 agent");
   const ctx = sess(id).contextTokens; const n0 = asstCount(id); await pas("agent", "send", id, "ZQX-PROMPT say ok");
   const last = transcript(id).filter((e) => e.type === "assistant" && e.message?.usage).pop().message.usage;
@@ -348,5 +348,5 @@ test("V5 a send to a closed agent after a restart reads the cache instead of rew
 
 // ---- per-case reports ------------------------------------------------------------------------------
 for (const id of ["E3", "E4", "E5", "E6", "E7", "E8", "E9", "E10", "E11", "E12", "E13", "E15", "E16", "E17"]) test(`${id} (see E2E-RUBRIC.md)`, { skip: !(ON && PAID) }, verdictOf(id));
-test("E14 plugin mode is E3's forced-plugin run", { skip: !(ON && PAID) }, () => { assert.ok(results.get("E3")?.ok, "E3 failed"); });
+test("E14 plugin mode is E3's forced-plugin run", { skip: !(ON && PAID && wanted("E3")) }, () => { assert.ok(results.get("E3")?.ok, "E3 failed"); });
 test("spend summary", { skip: !(ON && PAID) }, () => { logLine(`TOTAL est. spend $${spend(true).toFixed(3)} (cap $${CAP})`); assert.ok(spend() <= CAP); });
