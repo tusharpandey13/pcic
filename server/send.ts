@@ -55,7 +55,7 @@ export function makeSender(d: SenderDeps) {
 
   const cliSend = (id: string, text: string): Promise<void> => new Promise((ok, no) => {
     const env = { ...d.env }; for (const k of IDENTITY) delete env[k];
-    const c = execFile(d.cfg().paseoBin, ["agent", "send", id, text], { env, timeout: d.cliTimeoutMs ?? 30000, killSignal: "SIGKILL" }, (err) => { children.delete(c); err ? no(err) : ok(); });
+    const c = execFile(d.cfg().paseoBin, ["agent", "send", id, text], { env, timeout: d.cliTimeoutMs ?? 30000, killSignal: "SIGKILL" }, (err) => { children.delete(c); if (err) d.log(`pcic: cli send failed (${(err as NodeJS.ErrnoException).code ?? err.name})`); err ? no(err) : ok(); });
     children.add(c);
     c.stdin?.end();
   });

@@ -32,7 +32,7 @@ export function createPcic(deps: Deps) {
   let closed = false, sweeping = false, startedAt = now(), startP: Promise<void> | null = null;
   const inflight = new Set<Promise<void>>();
   const starts: number[] = [];
-  let lastStart = 0, probeTries = 0, probing = false;
+  let lastStart = 0, probing = false, probed = false;
   const sender = makeSender({ paseo: () => paseo, cfg: () => cfg, store, env, timer, now, log, cliTimeoutMs: deps.cliTimeoutMs, version: deps.version ?? (async () => "unknown") });
 
   const reloadConfig = () => {
@@ -58,6 +58,7 @@ export function createPcic(deps: Deps) {
     a.due = a.anchor + cfg.idleSeconds * 1000;
     a.deadline = a.anchor + ttl * 1000 - cfg.lateGraceSeconds * 1000;
     a.state = "idle_wait"; a.result = undefined;
+    if (ttl <= 300 && cfg.ttlSeconds > 600) skip(a, "ttl_5m"); // R7: its cache would be cold by the time of the job
   };
   const mk = (id: string, cwd: string, labels: Record<string, string>, parent: string | null): Agent => {
     let a = agents.get(id);
@@ -65,7 +66,7 @@ export function createPcic(deps: Deps) {
     a.cwd = cwd || a.cwd; a.parent = parent ?? a.parent; if (labels) a.labels = labels;
     return a;
   };
-  const absorb = (a: Agent, s: Snap | null) => { if (s?.labels) a.labels = s.labels; };
+  const absorb = (a: Agent, s: Snap | null) => { if (s?.labels) a.labels = s.labels; if (s?.cwd) a.cwd = s.cwd; };
 
   const finish = (a: Agent, state: "done" | "skipped", result: string, ev: { event: string; reason?: string; tokens?: number | null; pre?: number | null; post?: number | null; mode?: string; ms?: number }) => {
     if (a.state !== "active") { a.state = state; a.result = result; } // when the owner is back, the new turn owns the state
@@ -106,8 +107,7 @@ export function createPcic(deps: Deps) {
       store.ensure();
       store.pruneClaims();
       for (const id of store.listJobs()) { store.hist({ agent: id, event: "interrupted" }); store.removeJob(id); } // R38
-      const v = store.verdict(); probeTries = v?.mode ? 0 : v?.tries ?? 0;
-      sender.setVersion(await sender.detectVersion());
+            sender.setVersion(await sender.detectVersion());
       const list = await (paseo as PaseoLike).agents.list();
       for (const e of list.entries as any[]) {
         const s: Snap & { id: string } = e?.agent ?? e;
@@ -130,7 +130,7 @@ export function createPcic(deps: Deps) {
     if (!j || j.sent === 0 || j.ownSeen >= j.sent) return false;
     let text: string | null = null;
     try { const r = rows(await handle(a.id).timeline.refetch({ direction: "tail", limit: 20, wholeTurns: true })).filter((x) => x.type === "user_message"); text = r.length ? r[r.length - 1].text : null; } catch {}
-    const own = text === null ? true : text.startsWith("[pcic checkpoint]") || text === "/compact";
+    const own = text === null ? true : text.startsWith("[pcic checkpoint]") || text === "/compact" || (text.includes("<paseo-system") && text.includes("/compact")); // the last form is an enveloped send (R25)
     if (own) j.ownSeen++;
     return own;
   }
@@ -156,7 +156,7 @@ export function createPcic(deps: Deps) {
         const a = mk(agent.id, agent.cwd, null as any, agent.parentAgentId ?? null);
         if (await ownTurn(a)) { a.ownActive = true; return; }
         if (a.job) { a.job.foreign = true; if (now() - a.job.lastSendAt <= 2000) store.hist({ agent: a.id, event: "race" }); }
-        a.state = "active"; a.turnStart = now(); a.ownActive = false;
+        a.state = "active"; a.turnStart = now();
       } catch { log("pcic: turn.before failed"); }
     },
     async "agent.turn.after"({ agent, outcome }: any, ctx: any) {
@@ -198,6 +198,7 @@ export function createPcic(deps: Deps) {
       for (const a of [...agents.values()]) {
         if (a.state !== "idle_wait") continue;
         if (a.anchor > t) schedule(a, t); // R9
+        try { absorb(a, handle(a.id).current()); } catch {}
         if (optedOut(a)) { a.state = "untracked"; continue; }
         if (t > a.deadline) { skip(a, "late"); continue; }
         if (t >= a.due) {
@@ -234,14 +235,14 @@ export function createPcic(deps: Deps) {
 
   /** R22: no verdict yet, 60 s after start, nothing queued or running: one probe, at most 3 tries per Paseo version. */
   async function maybeProbe() {
-    if (cfg.sendMode !== "auto" || probing || closed) return;
+    if (cfg.sendMode !== "auto" || probing || probed || closed) return; // one attempt per start
     const v = store.verdict();
     const ver = await sender.detectVersion();
     if (v && v.paseoVersion === ver && v.mode) return;
     if (now() - startedAt < 60e3 || inflight.size > 0 || [...agents.values()].some((a) => a.state === "queued")) return;
     const tries = v && v.paseoVersion === ver ? v.tries : 0;
     if (tries >= 3) return;
-    probing = true;
+    probing = probed = true;
     try {
       const mode = await sender.selfTest();
       store.setVerdict({ paseoVersion: ver, mode, at: now(), tries: mode ? tries : tries + 1 });

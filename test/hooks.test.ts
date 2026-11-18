@@ -9,7 +9,7 @@ const stopIn = (path: string) => ({ session_id: "sid1", transcript_path: path, c
 
 // T4 (R3)
 test("T4 hooks do nothing without PASEO_AGENT_ID or with PCIC_OFF=1, even on a cold 300K transcript", async () => {
-  for (const patch of [{ PASEO_AGENT_ID: "" }, { PCIC_OFF: "1" }]) {
+  for (const patch of [{ PASEO_AGENT_ID: "" } as Record<string, string>, { PCIC_OFF: "1" } as Record<string, string>]) {
     const t = tmp({ ...patch }); const p = transcript(t, [asst({ at: T0, tokens: 300000 })]);
     const before = listing(t.dir);
     for (const ev of ["Stop", "PreCompact", "UserPromptSubmit"]) {

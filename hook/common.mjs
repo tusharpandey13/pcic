@@ -37,7 +37,10 @@ export const PRICES = [
   ["haiku-5", [0.1, 0.125, 0.2, 0.01, 0.5]], ["haiku-4", [1, 1.25, 2, 0.1, 5]],
 ].map(([re, [input, write5m, write1h, read, output]]) => [new RegExp(re), { input, write5m, write1h, read, output }]);
 
-/** R43: defaults, per-key fallback with one warning each, unknown keys warned, unparseable file means all defaults. */
+/**
+ * R43: defaults, per-key fallback with one warning each, unknown keys warned, unparseable file means all defaults.
+ * @returns {Record<string, any>}
+ */
 export function loadConfig(env = process.env, warn = (_m) => {}) {
   const cfg = {};
   for (const [k, [d]] of Object.entries(SCHEMA)) cfg[k] = d;
