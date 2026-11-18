@@ -1,6 +1,6 @@
 // Tier E (live, isolated, paid). Gated: PCIC_E2E=1 starts an isolated Paseo daemon in a temp home (never ~/.paseo);
 // PCIC_E2E_PAID=1 additionally allows cases that spend model tokens. Run only with the owner's approval (E2E-RUBRIC.md).
-// Only E1 and E2 are written so far; E3..E17 are listed as skipped, never as passed.
+// Only E1 and E2 are written so far; E3..E17 are listed as skipped, never as passed. E1 ran green live on 18-Nov; paid cases are blocked until a login is provided (see AUTH below).
 import assert from "node:assert/strict";
 import { after, before, test } from "node:test";
 import { execFileSync } from "node:child_process";
@@ -9,7 +9,11 @@ import { createServer } from "node:net";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 
-const ON = process.env.PCIC_E2E === "1", PAID = process.env.PCIC_E2E_PAID === "1";
+const ON = process.env.PCIC_E2E === "1";
+// Auth: a temp CLAUDE_CONFIG_DIR has no login (macOS keychain entries are per config dir) and credentials are never copied.
+// Paid cases need either PCIC_E2E_CLAUDE_CONFIG_DIR (a dedicated dir the owner logged in once with `CLAUDE_CONFIG_DIR=<dir> claude /login`; pcic hooks are then merged into it, so it must not be the owner's real one) or CLAUDE_CODE_OAUTH_TOKEN (from `claude setup-token`).
+const AUTH = Boolean(process.env.PCIC_E2E_CLAUDE_CONFIG_DIR || process.env.CLAUDE_CODE_OAUTH_TOKEN);
+const PAID = process.env.PCIC_E2E_PAID === "1" && AUTH;
 const REPO = resolve(import.meta.dirname, "..", "..");
 let tmp = "", home = "", pcic = "", claude = "", env: NodeJS.ProcessEnv = {};
 
@@ -19,7 +23,7 @@ const free = () => new Promise<number>((ok) => { const s = createServer().listen
 before(async () => {
   if (!ON) return;
   tmp = realpathSync(mkdtempSync(join(tmpdir(), "pcice-")));
-  home = join(tmp, "paseo"); pcic = join(tmp, "pcic"); claude = join(tmp, "claude"); mkdirSync(home); mkdirSync(claude);
+  home = join(tmp, "paseo"); pcic = join(tmp, "pcic"); claude = process.env.PCIC_E2E_CLAUDE_CONFIG_DIR || join(tmp, "claude"); mkdirSync(home); mkdirSync(claude, { recursive: true });
   env = { ...process.env, HOME: tmp, PCIC_HOME: pcic, CLAUDE_CONFIG_DIR: claude };
   for (const k of Object.keys(env)) if (k.startsWith("PASEO_")) delete env[k];
   mkdirSync(pcic);
