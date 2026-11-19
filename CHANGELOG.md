@@ -1,6 +1,6 @@
 # Changelog
 
-## 0.2.0 (unreleased)
+## 0.2.0 (19-Nov-2026)
 
 - Cold-return card: when the guard blocks a prompt, the Paseo app shows a choice card (resume with full context, compact first, or continue from a checkpoint with `/clear`, with "don't ask again" variants) and pcic sends your blocked prompt for you after the pick (R44..R49). The prompt is kept only in `cards/<id>.json` (mode 0600, 24 hours). The plain-text block stays as the fallback.
 - New config keys `coldChoice` (`ask`, `resume`, `checkpoint`; default `ask`) and `freshContextTokens` (20000, for the card's checkpoint estimate). `pcic config <key> [value]` reads and sets config keys (R50).

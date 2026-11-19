@@ -1,7 +1,7 @@
 {
   "name": "pcic",
   "private": true,
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "Paseo Claude Idle Compaction",
   "type": "module",
   "license": "MIT",
