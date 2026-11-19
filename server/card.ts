@@ -95,22 +95,32 @@ export function makeCards(d: CardDeps) {
     } catch { return fail(card, "error"); }
   }
 
-  let scanning = false;
-  /** R48: act once on each fresh `auto` card. The rename claim makes a second call, or a second watcher event, a no-op. */
-  async function autoScan(): Promise<void> {
-    if (scanning || !d.paseo() || !d.cfg().enabled) return;
+  let scanning = false, again = false, againAll = false;
+  /** Auto cards that found the agent busy. Releasing a claim rewrites the card file, which the watcher sees; only the sweep (`all`) retries these, so a busy agent cannot cause a loop. */
+  const waiting = new Set<string>();
+  /** R48: act once on each fresh `auto` card. The rename claim makes a second call, or a second watcher event, a no-op. A call that arrives during a scan makes it run once more, so a card written mid-scan is not missed. */
+  async function autoScan(all = true): Promise<void> {
+    if (scanning) { again = true; againAll = againAll || all; return; }
+    if (!d.paseo() || !d.cfg().enabled) return;
     scanning = true;
+    try {
+      let full = all;
+      do { again = false; againAll = false; await scanOnce(full); full = againAll; } while (again);
+    } finally { scanning = false; }
+  }
+  async function scanOnce(all: boolean): Promise<void> {
     try {
       let files: string[] = [];
       try { files = readdirSync(cardsDir(home)).filter((f) => f.endsWith(".json")); } catch { return; }
       for (const f of files) {
         const id = f.slice(0, -5);
         const card = readJson(cardPath(home, id));
-        if (!valid(card) || card.auto !== true || !CARD_ID.test(id)) continue;
+        if (!valid(card) || card.auto !== true || !CARD_ID.test(id) || (!all && waiting.has(id))) continue;
         if (now() - card.createdAt > AUTO_MAX_AGE_MS) { rmSync(cardPath(home, id), { force: true }); store.hist({ agent: card.agentId, event: "card_failed", reason: "auto_stale" }); continue; }
-        await choose({ cardId: id, choice: "checkpoint", always: false }); // not_idle releases the claim: the next scan tries again
+        const r = await choose({ cardId: id, choice: "checkpoint", always: false }); // not_idle releases the claim: the next sweep tries again
+        if (r.status === "not_idle") waiting.add(id); else waiting.delete(id);
       }
-    } catch { d.log("pcic: auto card scan failed"); } finally { scanning = false; }
+    } catch { d.log("pcic: auto card scan failed"); }
   }
 
   /** R49 */

@@ -267,7 +267,7 @@ export function createPcic(deps: Deps) {
     watchCards: (): (() => void) => {
       try {
         mkdirSync(cardsDir(home), { recursive: true, mode: 0o700 });
-        const w = watch(cardsDir(home), () => { void cards.autoScan(); });
+        const w = watch(cardsDir(home), () => { void cards.autoScan(false); });
         w.on("error", () => { try { w.close(); } catch {} watchers.delete(w); });
         watchers.add(w);
         return () => { try { w.close(); } catch {} watchers.delete(w); };

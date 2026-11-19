@@ -136,3 +136,11 @@ test("T42 the sweep deletes cards older than 24 h, used or not, and keeps younge
 test("T42 the sweep prunes even before the plugin has a client; a missing cards/ is fine", async () => {
   const r = rig(); await r.sweep(); mkCard(r, { createdAt: r.clock.now() - 30 * 3600e3 }); await r.sweep(); assert.deepEqual(readdirSync(join(r.t.home, "cards")), []); r.cleanup();
 });
+test("T41 a busy agent does not make the watcher loop: the released card is retried by the sweep only", async () => {
+  const r = await setup(); let refreshes = 0; r.paseo.onRefresh = () => { refreshes++; };
+  const snap = r.paseo.agents_.get(ID)!.snap; snap.status = "running"; const stop = r.pcic.watchCards();
+  mkCard(r, { auto: true }); await new Promise((x) => setTimeout(x, 400));
+  assert.ok(refreshes <= 2, String(refreshes)); assert.deepEqual(sentTexts(r), []); assert.ok(existsSync(cardPath(r.t.home, CARD)));
+  snap.status = "idle"; await new Promise((x) => setTimeout(x, 200)); assert.deepEqual(sentTexts(r), [], "the watcher alone does not retry");
+  await r.sweep(); await settle(); stop(); assert.deepEqual(sentTexts(r), ["/clear", PROMPT]); r.cleanup();
+});
