@@ -19,7 +19,7 @@ const PAID = process.env.PCIC_E2E_PAID === "1" && AUTH;
 const CAP = Number(process.env.PCIC_E2E_CAP ?? 1.9);
 const REPO = resolve(import.meta.dirname, "..", "..");
 const LOG = process.env.PCIC_E2E_LOG ?? "/tmp/pcic-run";
-const FAKE_ACP = process.env.PCIC_E2E_FAKE_ACP ?? "/Users/t/src/awt/paseo-plugin/test/fake/acp_agent.py";
+const FAKE_ACP = process.env.PCIC_E2E_FAKE_ACP ?? resolve(import.meta.dirname, "../../../awt/paseo-plugin/test/fake/acp_agent.py");
 let tmp = "", home = "", pcic = "", claude = "", proj = "", env: NodeJS.ProcessEnv = {};
 const KNOBS = { ttlSeconds: 240, idleSeconds: 120, lateGraceSeconds: 30, minContextTokens: 30000, sweepSeconds: 5, staggerSeconds: 5, maxConcurrent: 6, checkpointTimeoutSeconds: 120, compactTimeoutSeconds: 120, precompactExtra: "Include the literal token ZQX-PRECOMPACT-7 in the summary." };
 

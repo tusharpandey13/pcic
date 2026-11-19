@@ -148,13 +148,7 @@ rm -rf "${PCIC_HOME:-${XDG_DATA_HOME:-$HOME/.local/share}/pcic}"   # optional: s
 
 **What is not covered?** Claude Code terminal sessions (native idle compaction handles them), in-session Task subagents, and single turns that run longer than the cache lifetime.
 
-**What is not yet verified?** pcic is version 0.1.0, tested offline against a fake Paseo and recorded transcripts. Some assumptions have not yet been checked against a live daemon. Each has a planned live test (SPEC.md, "Unverified"):
-
-- that plugin `send()` delivers `/compact` as plain text (confirmed only from Paseo's source; the self-test checks it on your machine and falls back to the CLI);
-- that `Stop` fires in Paseo sessions with `PASEO_AGENT_ID` in the hook environment;
-- that prompts typed in the Paseo app carry no `<paseo-system>` envelope;
-- that background work and pending permissions are visible to the plugin;
-- the cost of `/compact` on a cold cache, which the guard's second estimate assumes.
+**What has been verified live?** pcic 0.1.0 passed its whole live suite (E1 to E19, SPEC.md "Unverified" V1 to V7, V9 and V10) against an isolated Paseo 0.16.1 daemon and Claude Code on 18 and 19 Nov 2026: plugin `send()` delivers `/compact` as plain text, `Stop` fires with `PASEO_AGENT_ID`, prompts typed in the app carry no `<paseo-system>` envelope, background work and pending permissions are visible to the plugin, and a send after a daemon restart reads the cache instead of rewriting it. One figure is still an estimate: the dollar cost of `/compact` on a cold cache, which the guard's second estimate assumes (V8; the live test checks the token count only).
 
 ## Related projects
 
