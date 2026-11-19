@@ -1,12 +1,14 @@
 // Per-agent state, hooks, sweeper and queue (SPEC: State machine, R1..R12, R16, R20, R26, R27, R35..R39).
 import { randomUUID } from "node:crypto";
-import { statSync } from "node:fs";
+import { mkdirSync, statSync, watch, type FSWatcher } from "node:fs";
 import { join } from "node:path";
 import { loadConfig, num, pcicHome } from "../server/common.mjs";
 import { makeSender, realTimer, turnUserText, type Handle, type PaseoLike, type Snap, type Timer } from "./send.js";
 import { makeStore, type SessionRecord } from "./store.js";
 import { PAUSE_CODES, type Config } from "./types.js";
 import { runJob } from "./job.js";
+import { makeCards, type CardChoice } from "./card.js";
+import { cardsDir } from "./card.mjs";
 
 export type State = "untracked" | "active" | "idle_wait" | "queued" | "checkpoint" | "compact" | "done" | "skipped";
 export interface Job { id: string; anchor: number; sent: number; ownSeen: number; foreign: boolean; startedAt: number; lastSendAt: number; ownOutcome: { code: string } | null }
@@ -34,6 +36,9 @@ export function createPcic(deps: Deps) {
   const starts: number[] = [];
   let lastStart = 0, probing = false, probed = false;
   const sender = makeSender({ paseo: () => paseo, cfg: () => cfg, store, env, timer, now, log, cliTimeoutMs: deps.cliTimeoutMs, version: deps.version ?? (async () => "unknown") });
+
+  const cards = makeCards({ home, env, now, cfg: () => cfg, store, log, paseo: () => paseo, sender });
+  const watchers = new Set<FSWatcher>();
 
   const reloadConfig = () => {
     let sig = "";
@@ -188,11 +193,14 @@ export function createPcic(deps: Deps) {
 
   // ---- sweeper --------------------------------------------------------------------------------
   async function sweep(): Promise<void> {
-    if (closed || sweeping || !paseo) return;
+    if (closed || sweeping) return;
+    cards.prune(); // R49: even before the first hook event gives us a client
+    if (!paseo) return;
     sweeping = true;
     try {
       await startP;
       reloadConfig();
+      await cards.autoScan(); // R48: the fallback for the cards/ watcher
       const t = now();
       if (!cfg.enabled) { for (const a of agents.values()) if (a.state === "queued") { a.state = "done"; a.result = "disabled"; } return; }
       for (const a of [...agents.values()]) {
@@ -252,13 +260,26 @@ export function createPcic(deps: Deps) {
 
   return {
     hooks, sweep, sender, store,
+    /** R47: the RPC. `p` is the client the RPC handler received; with it the plugin can work after a daemon restart without waiting for a hook event. */
+    choose: async (input: { cardId: string; choice: CardChoice; always?: boolean }, p?: PaseoLike) => { if (p && !closed) await startIfNeeded(p); reloadConfig(); return cards.choose(input); },
+    autoScan: () => cards.autoScan(),
+    /** R48: watch cards/ so an auto card is acted on within moments. Returns the closer. A failed watch is not fatal: the sweep scans too. */
+    watchCards: (): (() => void) => {
+      try {
+        mkdirSync(cardsDir(home), { recursive: true, mode: 0o700 });
+        const w = watch(cardsDir(home), () => { void cards.autoScan(); });
+        w.on("error", () => { try { w.close(); } catch {} watchers.delete(w); });
+        watchers.add(w);
+        return () => { try { w.close(); } catch {} watchers.delete(w); };
+      } catch { log("pcic: cannot watch cards/; the sweep scans instead"); return () => {}; }
+    },
     /** Lets a test (or the plugin entry) start without a hook event. */
     start: (p: PaseoLike) => startIfNeeded(p),
     state: (id: string) => agents.get(id),
     config: () => cfg,
     idle: async () => { while (inflight.size) await Promise.allSettled([...inflight]); },
     /** R39 */
-    cleanup: () => { closed = true; sender.killChildren(); store.close(); },
+    cleanup: () => { closed = true; for (const w of watchers) { try { w.close(); } catch {} } watchers.clear(); sender.killChildren(); store.close(); },
   };
 }
 export type Pcic = ReturnType<typeof createPcic>;

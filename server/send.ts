@@ -75,8 +75,8 @@ export function makeSender(d: SenderDeps) {
     setVersion: (v: string) => { version = v; },
     switchToCli: () => { forced = "cli"; d.store.setVerdict({ paseoVersion: version, mode: "cli", at: d.now(), tries: 0 }); },
     killChildren: () => { for (const c of children) c.kill("SIGKILL"); children.clear(); },
-    /** The checkpoint turn: plugin mode uses run(); cli mode sends then waits. */
-    async checkpoint(id: string, text: string, timeoutS: number): Promise<Outcome> {
+    /** One turn with a fixed text (the checkpoint, or `/clear` for the card): plugin mode uses run(); cli mode sends then waits. */
+    async turn(id: string, text: string, timeoutS: number): Promise<Outcome> {
       const p = d.paseo(); if (!p) return { kind: "send_failed" };
       const h = p.agents.ref(id);
       try {
@@ -84,6 +84,12 @@ export function makeSender(d: SenderDeps) {
         await cliSend(id, text);
         return await race(h.waitForFinish(timeoutS * 1000).then(fromRun), timeoutS * 1000);
       } catch { return { kind: "send_failed" }; }
+    },
+    checkpoint(id: string, text: string, timeoutS: number): Promise<Outcome> { return this.turn(id, text, timeoutS); },
+    /** Sends one text and does not wait for the turn (the owner's own prompt, R47). True when the send was accepted. */
+    async say(id: string, text: string): Promise<boolean> {
+      const p = d.paseo(); if (!p) return false;
+      try { if (mode() === "plugin") await p.agents.ref(id).send(text, opts); else await cliSend(id, text); return true; } catch { return false; }
     },
     /** Exactly `/compact`, then wait for the turn to end. */
     async compact(id: string, timeoutS: number): Promise<Outcome> {

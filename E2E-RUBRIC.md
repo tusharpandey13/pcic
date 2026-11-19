@@ -62,7 +62,9 @@ Companion to `SPEC.md`. Tier T runs everywhere at $0. Tier E runs a real, isolat
 | T37 | R44, R33 | The guard blocks a cold prompt, with a known and an unknown model, awt set and unset, a 3,000-character prompt, and an unwritable `cards/` | A mode-0600 card file with every field; the text ends with the card line (`-` for unknown dollars) and is at most 600 characters; the prompt is only in the card file; an unwritable `cards/` gives a plain block |
 | T38 | R45 | Transformer input: a valid line, no line, malformed lines, the line without the block text, each text-carrying item type, the same input twice | One `pcic.coldCard` v1 item with only the card data; anything else unchanged; identical output |
 | T39 | R46 (V13) | The view model for awt and no awt, an auto card and unknown prices; the row texts; the client entry bundled with esbuild | Labels as in R46; no `node:` import and no server module in the client graph |
-| T41 | R31, R48 | `coldChoice` `resume`, `checkpoint`, and an invalid value | `resume` passes and logs `guard_pass_setting`; `checkpoint` blocks once with an auto card; invalid means `ask` |
+| T41 | R31, R48 | `coldChoice` `resume`, `checkpoint`, and an invalid value; an auto card scanned twice, with a busy agent, stale, by the sweep and by the watcher | `resume` passes and logs `guard_pass_setting`; `checkpoint` blocks once with an auto card, acted on once (`/clear` then the prompt); invalid means `ask` |
+| T40 | R47 | The RPC against the fake Paseo: each choice, a failed compaction, `already_used` (also two at once), `not_idle` with the claim released, an agent busy after `/clear`, expired and malformed ids, `always` | The exact prompt is sent once and only the texts of R47; no prompt in history or logs |
+| T42 | R49 | A sweep with old, young and used cards | Only the young card is left |
 
 ## Tier E (live, isolated, paid)
 

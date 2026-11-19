@@ -6,7 +6,7 @@ import { atomicWrite, createExcl, readJson, record } from "../server/common.mjs"
 export interface SessionRecord { sessionId: string | null; transcriptPath: string; cwd: string | null; awtDir: string | null; lastAssistantAt: number; lastAssistantUuid: string | null; contextTokens: number | null; model: string | null; ttlObserved: number | null; writtenAt: number }
 export interface JobFile { jobId: string; anchor: number; phase: string; startedAt: number }
 export interface Verdict { paseoVersion: string; mode: "plugin" | "cli" | null; at: number; tries: number }
-export interface HistoryEvent { agent?: string; event: string; reason?: string; tokens?: number | null; pre?: number | null; post?: number | null; mode?: string; ms?: number }
+export interface HistoryEvent { agent?: string; event: string; reason?: string; tokens?: number | null; pre?: number | null; post?: number | null; mode?: string; ms?: number; choice?: string; always?: boolean }
 
 const safe = (s: string) => s.replace(/[^A-Za-z0-9._-]/g, "_").slice(0, 120);
 
