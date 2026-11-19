@@ -1,9 +1,11 @@
 // The Claude Code hooks: Stop (session record), PreCompact (summary instructions), UserPromptSubmit (cold-return guard).
 // Every path catches its own errors and ends in "do nothing": exit 0, no output (R4).
 import { execFile } from "node:child_process";
+import { randomBytes } from "node:crypto";
 import { readdirSync, rmSync, statSync } from "node:fs";
 import { join } from "node:path";
 import { atomicWrite, createExcl, hookActive, loadConfig, nowMs, num, pcicHome, priceFor, readJson, record } from "../server/common.mjs";
+import { cardLine, writeCard } from "../server/card.mjs";
 import { readTail } from "../server/transcript.mjs";
 
 const PASS = { code: 0, stdout: "", stderr: "" };
@@ -12,6 +14,7 @@ const quiet = () => {};
 const AWT_NOTE = "pcic compaction note: this task keeps an awt record (goal, state, decisions, open questions, recent notes). It is added back to the context automatically right after this compaction, so do not restate it. The summary must keep: the user's latest request and constraints (verbatim when short); work in progress not yet in awt (files being changed with paths, commands running, partial results, errors seen); anything decided or learned since the last awt record; the next concrete step. Drop tool output already acted on and file contents that can be read again.";
 const GENERIC_NOTE = "pcic compaction note: this conversation is being compacted because it went idle. The summary must keep: the goal; the user's latest request and constraints (verbatim when short); decisions made and why; work in progress (files with paths, commands, partial results, errors); open questions; the next concrete step. Drop tool output already acted on and file contents that can be read again.";
 
+const isDir = (p) => { try { return statSync(p).isDirectory(); } catch { return false; } };
 const safeName = (s) => String(s).replace(/[^A-Za-z0-9._-]/g, "_").slice(0, 120);
 
 /** R29 */
@@ -66,22 +69,46 @@ const fmtIdle = (s) => { const m = Math.floor(s / 60); return m >= 60 ? `${Math.
 const kfmt = (n) => (n >= 1000 ? `${Math.round(n / 1000)}K` : String(n));
 const usd = (n) => `~$${n.toFixed(2)}`;
 
-/** R33. Every figure is computed; at most 600 characters. Without a known model the `~$` figures are left out. */
-export function blockMessage({ idleS, ttlS, tokens, model, cfg, prompt }) {
+/** R33. Every figure is computed; at most 600 characters including the card line (R44). Without a known model the `~$` figures are left out. */
+export function blockMessage({ idleS, ttlS, tokens, model, cfg, prompt, card = null }) {
   const p = priceFor(model, cfg);
-  const resend = p ? `: ${usd((tokens * p[ttlS <= 300 ? "write5m" : "write1h"]) / 1e6)} (estimate, API-equivalent; on a subscription this is plan usage).` : ".";
+  const resend = p ? `: ${usd((tokens * p[ttlS <= 300 ? "write5m" : "write1h"]) / 1e6)} (estimate; on a subscription, plan usage).` : ".";
   const compact = p ? `${usd((tokens * p.input + 2000 * p.output) / 1e6)} once (estimate), then` : "first, then";
-  const lines = [
-    `pcic: this agent's prompt cache has likely expired (idle ${fmtIdle(idleS)}; cache lasts ${fmtTtl(ttlS)}). Context ~${kfmt(tokens)} tokens.`,
-    `Sending now rewrites the whole context${resend}`,
-    "- Send the same message again to continue with the full context. pcic will not stop you again until the next idle gap.",
-    `- Or send /compact ${p ? "first: " : ""}${compact} the context is about ${kfmt(Math.min(tokens, 15000))} tokens.`,
-    "- Or send /clear: start empty; the awt brief is added back when AWT_DIR is set.",
-  ];
+  const head = `pcic: this agent's prompt cache has likely expired (idle ${fmtIdle(idleS)}; cache lasts ${fmtTtl(ttlS)}). Context ~${kfmt(tokens)} tokens.`;
+  const lines = card?.auto
+    ? [head, "pcic is continuing from a checkpoint (your setting): /clear, then your message. To be asked instead: pcic config coldChoice ask"]
+    : [
+      head,
+      `Sending now rewrites the whole context${resend}`,
+      "- Send the same message again: full context, no second stop.",
+      `- Or send /compact ${p ? "first: " : ""}${compact} the context is about ${kfmt(Math.min(tokens, 15000))} tokens.`,
+      "- Or send /clear: start empty (the awt brief is added back when AWT_DIR is set).",
+    ];
+  const tag = card ? "\n" + cardLine(card) : "";
   const base = lines.join("\n");
-  const flat = String(prompt ?? "").replace(/\s+/g, " ").trim().slice(0, 60);
-  const withEcho = flat ? `${base}\nYour message: "${flat}"` : base;
-  return (withEcho.length <= 600 ? withEcho : base).slice(0, 600);
+  const flat = String(prompt ?? "").replace(/\s+/g, " ").trim();
+  // The echo (J3.4: the block erases the prompt from the input) is the longest of 60, 40 or 20 characters that still fits.
+  for (const n of [60, 40, 20]) if (flat && (base + `\nYour message: "${flat.slice(0, n)}"` + tag).length <= 600) return base + `\nYour message: "${flat.slice(0, n)}"` + tag;
+  return (base + tag).slice(0, 600);
+}
+
+/** Size in characters of the awt brief a `/clear` would add back, within `ms`; null when unknown. */
+const awtBriefChars = (env, ms) => new Promise((done) => {
+  if (!env.AWT_DIR) return done(null);
+  try {
+    const p = execFile("awt", ["resume", "--hook", "--framed"], { env, timeout: ms, killSignal: "SIGKILL", encoding: "utf8" }, (err, out) => done(err || String(out).trim() === "" ? null : String(out).length));
+    p.stdin?.end();
+  } catch { done(null); }
+});
+
+/** R44: the card's estimates. Null figures when the model is unknown (R33). */
+async function estimates({ tokens, ttlS, model, cfg, prompt, env }) {
+  const p = priceFor(model, cfg);
+  if (!p) return { resume: null, compact: null, checkpoint: null };
+  const write = p[ttlS <= 300 ? "write5m" : "write1h"];
+  const brief = Math.ceil(((await awtBriefChars(env, 600)) ?? 8000) / 4); // unknown brief size: assume 2,000 tokens
+  const fresh = cfg.freshContextTokens + (env.AWT_DIR ? brief : 0) + Math.ceil(String(prompt ?? "").length / 4);
+  return { resume: (tokens * write) / 1e6, compact: (tokens * p.input + 2000 * p.output) / 1e6, checkpoint: (fresh * write) / 1e6 };
 }
 
 /** R31, R32 */
@@ -102,12 +129,22 @@ async function guard(input, env, cfg, home) {
   const claim = `${sid}.${safeName(last.uuid)}.claim`;
   const agent = env.PASEO_AGENT_ID;
   if (readJson(marker)?.lastAssistantUuid === last.uuid) { record(home, { agent, event: "guard_pass_marker" }, { now, log: quiet }); return PASS; }
+  if (cfg.coldChoice === "resume") { record(home, { agent, event: "guard_pass_setting", choice: "resume" }, { now, log: quiet }); return PASS; } // R48
   // The O_EXCL claim decides who blocks, so parallel prompts cannot both block. A lost race passes.
   if (!createExcl(join(dir, claim))) return PASS;
   atomicWrite(marker, JSON.stringify({ lastAssistantUuid: last.uuid, at: now }));
   try { for (const f of readdirSync(dir)) if (f.startsWith(sid + ".") && f.endsWith(".claim") && f !== claim) rmSync(join(dir, f), { force: true }); } catch {}
   record(home, { agent, event: "guard_block", tokens }, { now, log: quiet });
-  return { code: 2, stdout: "", stderr: blockMessage({ idleS: Math.floor((now - last.at) / 1000), ttlS, tokens, model: last.model, cfg, prompt }) + "\n" };
+  const idleS = Math.floor((now - last.at) / 1000);
+  // R44: the card carries the prompt (mode 0600, never history). A card that cannot be written leaves a plain block (R33).
+  let card = null;
+  try {
+    const auto = cfg.coldChoice === "checkpoint";
+    const awt = !!env.AWT_DIR && isDir(env.AWT_DIR);
+    card = { v: 1, cardId: randomBytes(8).toString("hex"), agentId: agent, sessionId: input.session_id, lastAssistantUuid: last.uuid, prompt, createdAt: now, model: last.model ?? null, tokens, idleMs: idleS * 1000, awt, auto, est: await estimates({ tokens, ttlS, model: last.model, cfg, prompt, env }) };
+    writeCard(home, card);
+  } catch { card = null; }
+  return { code: 2, stdout: "", stderr: blockMessage({ idleS, ttlS, tokens, model: last.model, cfg, prompt, card }) + "\n" };
 }
 
 const HANDLERS = { Stop: stop, PreCompact: preCompact, UserPromptSubmit: guard };

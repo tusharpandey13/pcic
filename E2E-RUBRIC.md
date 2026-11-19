@@ -59,6 +59,10 @@ Companion to `SPEC.md`. Tier T runs everywhere at $0. Tier E runs a real, isolat
 | T34 | R41 | `pcic doctor` with each check failing in turn | The named line; exit 1; exit 0 when all are ok; no file changed (mtimes) |
 | T35 | R42 | Send spy over the whole T suite | Only the R42 texts; only probe agents created or archived; no `respondToPermission` calls |
 | T36 | R5 | `lastUsage` with NaN, negative, string and null fields; a session record with `contextTokens:-1` | Treated as unknown: `unknown_context`, guard passes |
+| T37 | R44, R33 | The guard blocks a cold prompt, with a known and an unknown model, awt set and unset, a 3,000-character prompt, and an unwritable `cards/` | A mode-0600 card file with every field; the text ends with the card line (`-` for unknown dollars) and is at most 600 characters; the prompt is only in the card file; an unwritable `cards/` gives a plain block |
+| T38 | R45 | Transformer input: a valid line, no line, malformed lines, the line without the block text, each text-carrying item type, the same input twice | One `pcic.coldCard` v1 item with only the card data; anything else unchanged; identical output |
+| T39 | R46 (V13) | The view model for awt and no awt, an auto card and unknown prices; the row texts; the client entry bundled with esbuild | Labels as in R46; no `node:` import and no server module in the client graph |
+| T41 | R31, R48 | `coldChoice` `resume`, `checkpoint`, and an invalid value | `resume` passes and logs `guard_pass_setting`; `checkpoint` blocks once with an auto card; invalid means `ask` |
 
 ## Tier E (live, isolated, paid)
 
@@ -120,6 +124,7 @@ Budget: at most 2.5 times the build cost per case, and at most 20 builds per ful
 | E17 | R11, R20 | After E3, restart the daemon and wait past the old due | No second job for the old anchor (the claim exists); no send |
 | E18 | R10 (V6) | Build context; the prompt ends by starting `sleep 900` with Bash `run_in_background` | `skipped` with reason `background_work`; no checkpoint, no `/compact`, no boundary. Written, not yet run live |
 | E19 | R10, R15 (V6, C15) | Agent in mode `default` asks permission for a Bash call that is not auto-allowed (`touch zqx-perm-1.txt`; `echo` is auto-allowed and never pends) after the context is built | No send while the request is pending; the request is not answered; no `checkpoint_ok` or `compacted`. Passed live 18-Nov-2026 |
+| E20 | R44..R50 (V11, V12, V13) | Isolated daemon with the plugin installed (server and client entries), `ttlSeconds` 60 and `minContextTokens` 0; one tiny Haiku turn; wait 2 min; send a marker prompt from the Paseo app | The block costs $0 and is rendered as the card (or as plain text with a recorded timeline item type, V11). Each option is clicked in its own run: `resume` sends the marker prompt once; `compact` shows a boundary, then the prompt; `checkpoint` shows `/clear` and the prompt with the awt brief; `always` writes `coldChoice`; a second click gives `already_used`. Record the item type and the fresh-session `cache_creation` tokens. Needs the owner's approval first |
 
 ### Live run notes (18-Nov-2026, Paseo 0.16.1, haiku-class, est. $0.6 + $0.4 reruns)
 

@@ -57,10 +57,10 @@ test("T27 marker dir not writable: the guard passes, never blocks", async () => 
 test("T27 message: template, computed figures, at most 600 chars, prompt echoed, no history leak", async () => {
   const t = tmp(); const r = await run(t, cold(t), "ZQX-PROMPT continue with the parser");
   assert.ok(r.stderr.length <= 601, String(r.stderr.length));
-  assert.match(r.stderr, /Sending now rewrites the whole context: ~\$1\.82 \(estimate, API-equivalent; on a subscription this is plan usage\)\./); // 182K x $10/M (opus 4.8, 1h write)
-  assert.match(r.stderr, /- Send the same message again to continue with the full context\. pcic will not stop you again until the next idle gap\./);
+  assert.match(r.stderr, /Sending now rewrites the whole context: ~\$1\.82 \(estimate; on a subscription, plan usage\)\./); // 182K x $10/M (opus 4.8, 1h write)
+  assert.match(r.stderr, /- Send the same message again: full context, no second stop\./);
   assert.match(r.stderr, /- Or send \/compact first: ~\$0\.96 once \(estimate\), then the context is about 15K tokens\./); // 182K x $5/M + 2K x $25/M
-  assert.match(r.stderr, /- Or send \/clear: start empty; the awt brief is added back when AWT_DIR is set\./);
+  assert.match(r.stderr, /- Or send \/clear: start empty \(the awt brief is added back when AWT_DIR is set\)\./);
   assert.match(r.stderr, /Your message: "ZQX-PROMPT continue with the parser"/);
   assert.ok(!JSON.stringify(historyOf(t)).includes("ZQX-PROMPT")); t.cleanup();
 });

@@ -26,6 +26,7 @@ export const SCHEMA = {
   maxJobsPerHour: [30, int(0)], checkpointTimeoutSeconds: [300, int(1)], compactTimeoutSeconds: [300, int(1)],
   pauseMinutes: [60, int(1)], sweepSeconds: [30, int(1)], sendMode: ["auto", (v) => ["auto", "plugin", "cli"].includes(v)],
   paseoBin: ["paseo", (v) => str(v) && v.length > 0], probeModel: ["haiku", str],
+  coldChoice: ["ask", (v) => v === "ask" || v === "resume" || v === "checkpoint"], freshContextTokens: [20000, int(0)],
   // $/M tokens per model family, from the Anthropic pricing page (18-Nov-2026). Matched by regex on the model id, first hit wins.
   prices: [null, (v) => v === null || (typeof v === "object" && !Array.isArray(v))],
 };
@@ -68,10 +69,10 @@ export function priceFor(model, cfg) {
 }
 
 /** Temp file in the same directory, then rename. */
-export function atomicWrite(path, text) {
+export function atomicWrite(path, text, mode) {
   mkdirSync(dirname(path), { recursive: true });
   const tmp = `${path}.${process.pid}.${Math.random().toString(36).slice(2)}.tmp`;
-  writeFileSync(tmp, text);
+  writeFileSync(tmp, text, mode === undefined ? undefined : { mode });
   renameSync(tmp, path);
 }
 export const readJson = (path) => { try { return JSON.parse(readFileSync(path, "utf8")); } catch { return null; } };
@@ -81,13 +82,13 @@ export function createExcl(path) {
   try { closeSync(openSync(path, "wx")); return true; } catch (e) { if (e?.code === "EEXIST") return false; throw e; }
 }
 
-const FIELDS = ["agent", "event", "reason", "tokens", "pre", "post", "mode", "ms"];
+const FIELDS = ["agent", "event", "reason", "tokens", "pre", "post", "mode", "ms", "choice", "always"];
 const failed = new Set();
 /** R40: one JSON line per event, whitelisted fields only (no prompt, reply, path or cwd), rotated at 5 MB. A failure is logged once and changes nothing. */
 export function record(home, ev, { now = Date.now(), log = (m) => { process.stderr.write(m + "\n"); } } = {}) {
   try {
     const line = { v: 1, at: new Date(now).toISOString() };
-    for (const f of FIELDS) if (ev[f] !== undefined && ev[f] !== null) line[f] = f === "agent" || f === "event" || f === "reason" || f === "mode" ? String(ev[f]).slice(0, 200) : ev[f];
+    for (const f of FIELDS) if (ev[f] !== undefined && ev[f] !== null) line[f] = f === "agent" || f === "event" || f === "reason" || f === "mode" || f === "choice" ? String(ev[f]).slice(0, 200) : f === "always" ? !!ev[f] : ev[f];
     const p = join(home, "history.jsonl");
     mkdirSync(home, { recursive: true });
     try { if (statSync(p).size > 5 * 1024 * 1024) renameSync(p, p + ".1"); } catch (e) { if (e?.code !== "ENOENT") throw e; }
@@ -96,4 +97,18 @@ export function record(home, ev, { now = Date.now(), log = (m) => { process.stde
     const k = e?.code || "error";
     if (!failed.has(k)) { failed.add(k); try { log(`pcic: history write failed (${k})`); } catch {} }
   }
+}
+
+/** R50: set one validated config key, keeping the other keys. Returns an error text, or null when written. */
+export function setConfigKey(env, key, value) {
+  if (!(key in SCHEMA)) return `unknown config key ${key}`;
+  if (!SCHEMA[key][1](value)) return `invalid value for ${key}`;
+  const file = join(pcicHome(env), "config.json");
+  let cur = {};
+  try {
+    cur = JSON.parse(readFileSync(file, "utf8"));
+    if (!cur || typeof cur !== "object" || Array.isArray(cur)) return "config.json is not a JSON object; fix it by hand first";
+  } catch (e) { if (e?.code !== "ENOENT") return "config.json is not valid JSON; fix it by hand first"; }
+  atomicWrite(file, JSON.stringify({ ...cur, [key]: value }, null, 2) + "\n");
+  return null;
 }
