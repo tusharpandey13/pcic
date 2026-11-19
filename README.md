@@ -188,7 +188,7 @@ rm -rf "${PCIC_HOME:-${XDG_DATA_HOME:-$HOME/.local/share}/pcic}"   # optional: s
 
 **Not yet verified live (0.2.0 card):**
 
-- which timeline item type carries the guard's text in Paseo and whether the plugin's client entry is bundled and drawn for a local install (the card; V11, V13), and what a fresh session costs after `/clear` (V12). Until checked live, the plain text is the fallback.
+- that the Paseo app draws the card and that a click reaches `pcic.choose` (R46). Verified live on 19 Nov 2026 against Paseo 0.16.2 and Haiku: the guard's text arrives as an `assistant_message` timeline item (V11), the plugin's client entry is bundled for a local install (V13), every choice works through the `pcic.choose` RPC (resume, compact, checkpoint, dismiss, don't ask again, already used, agent busy), and the first request after `/clear` wrote 9.2K tokens and read 13.6K from the cache (V12). The plain text stays the fallback.
 
 ## Related projects
 

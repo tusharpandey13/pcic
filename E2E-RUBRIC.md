@@ -136,3 +136,13 @@ HOME is not redirected (the keychain login is per real HOME); everything else is
 ## Reporting
 
 One line per case: `id PASS|FAIL cost=$x evidence=<dir>`, plus the run total against the cap. A FAIL names the first unmet criterion. The run is green only when every T case passes and every E case that ran passes. A skipped E case is reported as skipped, never as passed.
+
+### E20 result (19-Nov-2026, Paseo 0.16.2, Haiku, est. $0.10 for the passing run, about $0.21 with two earlier aborted runs)
+
+`PCIC_E2E=1 PCIC_E2E_PAID=1 PCIC_E2E_REAL_AUTH=1 PCIC_E2E_ONLY=E20`. `REAL_AUTH` reads the login from the default Claude config dir and never writes it; pcic's hooks sit in the temp project's `.claude/settings.json`. The suite's `ttlSeconds` minimum is 60, so each block waits 65 s.
+
+- PASS: the block costs $0 (no assistant request), the timeline item is an `assistant_message` carrying the card line (V11), and the card file holds the prompt (mode 0600).
+- PASS through `pcic.choose` over the daemon websocket (`plugin.rpc.invoke.request`, the app's own path; the CLI has no command for plugin RPCs): unknown card `expired`; `not_idle` while the agent runs a Bash `sleep` (claim released); `resume` sends the prompt once and a second call returns `already_used`; `compact` shows `/compact`, a compact boundary, then the prompt; `dismiss` sends nothing and the owner's resend passes (R32 marker); `resume` with `always` writes `coldChoice: "resume"` and the next cold send passes with `guard_pass_setting`; `checkpoint` on an awt agent shows `/clear` then the prompt. History holds `card_choice` events and no prompt text.
+- V12: the first request after `/clear` read 13,640 and wrote 9,188 tokens (see SPEC).
+- V13: client bundle present (free test `V13 ...`).
+- Not covered: the card was not drawn (no Paseo app UI was driven), so R46's rendering and the click path are unverified; `checkpoint` with `always`, the auto mode (R48) and a failed compaction were not run live.

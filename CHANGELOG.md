@@ -6,7 +6,7 @@
 - New config keys `coldChoice` (`ask`, `resume`, `checkpoint`; default `ask`) and `freshContextTokens` (20000, for the card's checkpoint estimate). `pcic config <key> [value]` reads and sets config keys (R50).
 - The block message is shorter so that the card line fits in 600 characters; the echo of your message is 60, 40 or 20 characters, whichever fits.
 - New plugin client entry (`index.client.tsx`, `client/`, `shared/`), RPC `pcic.choose`, a `cards/` watcher and card expiry in the sweep. New dependency `zod` (the SDK's RPC contracts need it) and `@types/react` (dev).
-- Unverified until a live run: the timeline item type that carries the hook's text, that the client entry is bundled and drawn for a local install, and the fresh-session cost (SPEC V11..V13).
+- Checked live on 19 Nov 2026 (Paseo 0.16.2): the hook's text is an `assistant_message` item (V11), the client entry is bundled for a local install (V13), every `pcic.choose` choice works, and a fresh session after `/clear` wrote 9.2K and read 13.6K tokens (V12). Not checked: that the app draws the card (R46).
 
 ## 0.1.0 (19-Nov-2026)
 
