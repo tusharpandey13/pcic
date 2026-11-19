@@ -37,19 +37,52 @@ The 2,000 output tokens for the summary and the 15K compacted size are the same 
 
 pcic acts at most once per idle period, only when the agent is idle, only when the context is at least 100K tokens, and never after the job's deadline (3 minutes before the cache expires). It never retries a job and never answers a permission request. Everything it sends is visible in the chat.
 
-### The cold-return guard
+### The cold-return guard and the card
 
-If the timer missed (the Mac was asleep, the daemon was down, or the agent was opted out), the first prompt after the cache expired is blocked once, at no cost, with a message like:
+If the timer missed (the Mac was asleep, the daemon was down, or the agent was opted out), the first prompt after the cache expired is blocked once, at no cost. The block is plain text, ending in a machine-readable card line:
 
 ```
 pcic: this agent's prompt cache has likely expired (idle 2h14m; cache lasts 1h). Context ~182K tokens.
-Sending now rewrites the whole context: ~$1.09 (estimate, API-equivalent; on a subscription this is plan usage).
-- Send the same message again to continue with the full context. pcic will not stop you again until the next idle gap.
+Sending now rewrites the whole context: ~$1.09 (estimate; on a subscription, plan usage).
+- Send the same message again: full context, no second stop.
 - Or send /compact first: ~$0.55 once (estimate), then the context is about 15K tokens.
-- Or send /clear: start empty; the awt brief is added back when AWT_DIR is set.
+- Or send /clear: start empty (the awt brief is added back when AWT_DIR is set).
+Your message: "first words of your prompt"
+[pcic-card v1 0123456789abcdef idle=8040000 tokens=182000 resume=1.09 compact=0.55 checkpoint=0.13 awt=1]
 ```
 
-Every figure is computed from the transcript and the price table (this example is a `sonnet-4` agent: 182,000 × $6 / 1M). Slash commands, `[pcic` messages and Paseo agent, schedule and heartbeat messages pass through.
+Every figure is computed from the transcript and the price table (this example is a `sonnet-4` agent: 182,000 x $6 / 1M). Slash commands, `[pcic` messages and Paseo agent, schedule and heartbeat messages pass through.
+
+In the Paseo app, the plugin's client entry turns that block into a card, the same choice pi agents get from pcg:
+
+```
+Cache expired 134 min ago. Context: 182K tokens.
+( ) Resume full context ~$1.09
+( ) Continue from checkpoint ~$0.13 (new session: awt brief + your message)
+( ) Compact, then send ~$0.55
+( ) Resume full context (don't ask again)
+( ) Continue from checkpoint (don't ask again)
+[Dismiss] [Submit]
+```
+
+Your blocked prompt is kept in a file in the state dir (`cards/`, mode 0600, deleted after 24 hours) and nowhere else: never in the history or the timeline. Submit sends it for you, once:
+
+- **Resume** sends it as it is.
+- **Compact** runs `/compact`, checks that it worked, then sends it. If the compaction fails, nothing is sent and the card says so.
+- **Continue from checkpoint** runs `/clear` and sends it; the awt brief is added back by the `SessionStart` hook. Without awt the option reads "Start fresh" and the new session starts with your message only.
+- **Dismiss** drops the card; send your message again by hand and it goes through.
+
+pcic sends these only when the agent is idle (a running agent answers "busy" and you can choose again), and a card answers once. Estimates are rough: the checkpoint figure assumes a fresh session starts with `freshContextTokens` tokens (20,000) at the write price.
+
+"Don't ask again" saves `coldChoice` in `config.json`:
+
+| `coldChoice` | What the guard does |
+|---|---|
+| `"ask"` (default) | Blocks once and shows the card |
+| `"resume"` | Lets the prompt through (no block) |
+| `"checkpoint"` | Blocks once, then pcic runs `/clear` and sends your prompt itself; the card shows a plain row saying so |
+
+Change it back with `node bin/pcic.mjs config coldChoice ask`. Without the client entry (an older app, or a plugin installed without it) you see the plain text above and the three ways out still work. Whether the card renders for a locally installed plugin is checked live, not yet verified (SPEC V11, V13).
 
 ## Architecture
 
@@ -57,9 +90,10 @@ Every figure is computed from the transcript and the price table (this example i
 
 | Part | Runs in | Does |
 |---|---|---|
+| Plugin client (`index.client.tsx`, `client/`, `shared/`) | Paseo app | Turns the guard's block into the cold-return card and handles its buttons through the plugin RPC |
 | Plugin `pcic` (`index.server.ts`, `server/`) | Paseo daemon | Tracks Claude agents, sweeps every 30 s on wall-clock time (so a sleeping Mac does not stall it), queues and runs jobs, and sends through the plugin API or, as a fallback, `paseo agent send` |
 | Hook script (`hook/pcic-hook.mjs`) | each Paseo Claude agent | `Stop` writes a session record, `PreCompact` adds summary instructions, `UserPromptSubmit` is the cold-return guard, `SessionStart` (`clear`) prints the awt brief after `/clear` |
-| CLI (`bin/pcic.mjs`) | your shell | `install [--uninstall]`, `doctor`, `hook <event>` |
+| CLI (`bin/pcic.mjs`) | your shell | `install [--uninstall]`, `doctor`, `config <key> [value]`, `hook <event>` |
 | awt | unchanged | Holds the task record; its own `SessionStart` `compact` hook re-injects the brief |
 
 The hooks act only when `PASEO_AGENT_ID` is set, so terminal Claude Code sessions are left to native idle compaction. The full contract is [SPEC.md](SPEC.md), rules R1 to R43.
@@ -108,6 +142,8 @@ State lives in `PCIC_HOME`, default `${XDG_DATA_HOME:-~/.local/share}/pcic`. Set
 | `sweepSeconds` | `30` | Sweeper period |
 | `sendMode` | `"auto"` | `"auto"` (the self-test decides), `"plugin"` or `"cli"` |
 | `paseoBin` | `"paseo"` | CLI used by the fallback send mode |
+| `coldChoice` | `"ask"` | `"ask"` (the card), `"resume"` (no block) or `"checkpoint"` (`/clear` and your prompt, automatically) |
+| `freshContextTokens` | `20000` | Tokens a fresh session starts with; used only for the card's checkpoint estimate |
 | `probeModel` | `"haiku"` | Model for the self-test agent (the cheapest Claude model); empty means Paseo's default Claude model |
 | `prices` | `null` | Your own $/M prices, keyed by a substring of the model id: `{"input", "write5m", "write1h", "read", "output"}`. Used only for the guard's estimate |
 
@@ -149,6 +185,10 @@ rm -rf "${PCIC_HOME:-${XDG_DATA_HOME:-$HOME/.local/share}/pcic}"   # optional: s
 **What is not covered?** Claude Code terminal sessions (native idle compaction handles them), in-session Task subagents, and single turns that run longer than the cache lifetime.
 
 **What has been verified live?** pcic 0.1.0 passed its whole live suite (E1 to E19, SPEC.md "Unverified" V1 to V7, V9 and V10) against an isolated Paseo 0.16.1 daemon and Claude Code on 18 and 19 Nov 2026: plugin `send()` delivers `/compact` as plain text, `Stop` fires with `PASEO_AGENT_ID`, prompts typed in the app carry no `<paseo-system>` envelope, background work and pending permissions are visible to the plugin, and a send after a daemon restart reads the cache instead of rewriting it. One figure is still an estimate: the dollar cost of `/compact` on a cold cache, which the guard's second estimate assumes (V8; the live test checks the token count only).
+
+**Not yet verified live (0.2.0 card):**
+
+- which timeline item type carries the guard's text in Paseo and whether the plugin's client entry is bundled and drawn for a local install (the card; V11, V13), and what a fresh session costs after `/clear` (V12). Until checked live, the plain text is the fallback.
 
 ## Related projects
 

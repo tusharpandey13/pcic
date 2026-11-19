@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.2.0 (unreleased)
+
+- Cold-return card: when the guard blocks a prompt, the Paseo app shows a choice card (resume with full context, compact first, or continue from a checkpoint with `/clear`, with "don't ask again" variants) and pcic sends your blocked prompt for you after the pick (R44..R49). The prompt is kept only in `cards/<id>.json` (mode 0600, 24 hours). The plain-text block stays as the fallback.
+- New config keys `coldChoice` (`ask`, `resume`, `checkpoint`; default `ask`) and `freshContextTokens` (20000, for the card's checkpoint estimate). `pcic config <key> [value]` reads and sets config keys (R50).
+- The block message is shorter so that the card line fits in 600 characters; the echo of your message is 60, 40 or 20 characters, whichever fits.
+- New plugin client entry (`index.client.tsx`, `client/`, `shared/`), RPC `pcic.choose`, a `cards/` watcher and card expiry in the sweep. New dependency `zod` (the SDK's RPC contracts need it) and `@types/react` (dev).
+- Unverified until a live run: the timeline item type that carries the hook's text, that the client entry is bundled and drawn for a local install, and the fresh-session cost (SPEC V11..V13).
+
 ## 0.1.0 (19-Nov-2026)
 
 - Paseo plugin: tracks Claude agents, runs one checkpoint turn plus `/compact` per idle period while the prompt cache is warm.
