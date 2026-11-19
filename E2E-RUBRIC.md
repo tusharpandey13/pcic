@@ -65,6 +65,7 @@ Companion to `SPEC.md`. Tier T runs everywhere at $0. Tier E runs a real, isolat
 | T41 | R31, R48 | `coldChoice` `resume`, `checkpoint`, and an invalid value; an auto card scanned twice, with a busy agent, stale, by the sweep and by the watcher | `resume` passes and logs `guard_pass_setting`; `checkpoint` blocks once with an auto card, acted on once (`/clear` then the prompt); invalid means `ask` |
 | T40 | R47 | The RPC against the fake Paseo: each choice, a failed compaction, `already_used` (also two at once), `not_idle` with the claim released, an agent busy after `/clear`, expired and malformed ids, `always` | The exact prompt is sent once and only the texts of R47; no prompt in history or logs |
 | T42 | R49 | A sweep with old, young and used cards | Only the young card is left |
+| T43 | R50 | `pcic config` with a good value, a bad value, a bad key, wrong argument counts, a missing and an unparseable config file | Valid values are written with the other keys kept; every refusal leaves the file untouched with the exit codes of R50 |
 
 ## Tier E (live, isolated, paid)
 

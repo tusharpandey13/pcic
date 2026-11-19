@@ -35,7 +35,7 @@ The only expensive event is a request against a large context whose cache has ex
 | Plugin `pcic` (`index.server.ts`) | Paseo daemon (plugin subprocess) | Tracks claude agents, the sweeper, the job queue, the send adapter, the startup self-test, env injection at `agent.open.before`, history, the cold-return card's RPC `pcic.choose`, the `cards/` watcher and card expiry (R47..R49) |
 | Plugin client `pcic` (`index.client.tsx`, `client/`, `shared/`) | Paseo app | Timeline transformers that turn the guard's block text into the card item, and the card renderer (R45, R46) |
 | Hook script `hook/pcic-hook.mjs` (plain Node, no dependencies) | Claude Code, inside each Paseo claude agent | `Stop`: writes the session record. `PreCompact`: prints summary instructions. `UserPromptSubmit`: the cold-return guard |
-| CLI `bin/pcic.mjs` | the owner's shell | `install [--uninstall]` (hook entries), `doctor` (read-only checks), `config <key> <value>` (R50), `hook <event>` (what Claude Code calls) |
+| CLI `bin/pcic.mjs` | the owner's shell | `install [--uninstall]` (hook entries), `doctor` (read-only checks), `config <key> [value]` (R50), `hook <event>` (what Claude Code calls) |
 | awt (unchanged) | existing | `awt state/decide/note` in the checkpoint turn. The existing `SessionStart` `compact` hook (`awt init --hooks claude`) injects the framed brief after the compaction |
 
 The plugin SDK gives the server entry no Paseo client; a hook context does. So the start-up rebuild (R37) and the sweeper begin at the first hook event after the plugin starts. That client is the plugin process's single long-lived one, so keeping it is safe.
@@ -261,10 +261,9 @@ The guard still blocks (exit 2): it is the only point that costs nothing, and a 
   With `always` true and a choice of `resume` or `checkpoint`, `coldChoice` is merged into `config.json` (R50's atomic write, other keys kept) before the sends. History gets `card_choice` (`choice`, `always`) once the choice is accepted and `card_failed` (`reason`) on any failure; never the prompt. The RPC hands its client to the plugin, so a daemon restart needs no hook event first.
 - **R48** With `coldChoice` `resume` the guard passes the prompt (R31) and writes `guard_pass_setting`. With `checkpoint` the guard blocks once as usual (R32), writes the card with `auto: true` and the card line with ` auto=1`, and the plugin acts on it with no click: a watcher on `cards/` (and, as the fallback, each sweep) finds each `auto` card, claims it as R47 does, runs the `checkpoint` choice with `always` false, and the second watcher event or sweep finds nothing to do. An auto card for a busy agent is retried at each scan for 10 minutes; an older one is deleted unsent (`card_failed` reason `auto_stale`), because the owner has probably moved on. The renderer shows the non-interactive row of R46. Cards without `auto` are never acted on without a click. `coldChoice` is `ask`, `resume` or `checkpoint`; any other value falls back to `ask` (R43).
 - **R49** The sweep deletes every file in `cards/` older than 24 hours (by the card's `createdAt`, else the file time), used or not, even before the plugin has a client. Cards survive a daemon restart, and the transformer works on refetched history, so a card whose block text is still in the history is drawn again and is usable until it is 24 hours old. Timeline rows themselves do not survive a restart.
+- **R50** `pcic config <key>` prints the effective value of a config key as JSON. `pcic config <key> <value>` sets it: the value is read as JSON when it parses (`true`, `30000`) and as text otherwise (`resume`), checked against the same rules as R43, and merged into `config.json` with the atomic write of the state dir, keeping the other keys. A key that does not exist, a value that fails its check or a `config.json` that cannot be parsed gives `error:` and `fix:` lines on stderr and exit 1, and the file is left untouched; a wrong number of arguments gives the usage and exit 2. `pcic config coldChoice ask|resume|checkpoint` is the way back from a "don't ask again" choice.
 
-## awt
-
-No awt changes are needed. pcic uses `awt state/decide/note` (the checkpoint), `awt resume --hook --framed` (the PreCompact probe) and the existing `SessionStart` `compact` entry from `awt init --hooks claude`. The verb count stays 16.
+## awt are needed. pcic uses `awt state/decide/note` (the checkpoint), `awt resume --hook --framed` (the PreCompact probe) and the existing `SessionStart` `compact` entry from `awt init --hooks claude`. The verb count stays 16.
 
 Known interaction: after the `/compact` turn, the awt plugin's stand-in handoff may record `[auto] checkpoint saved` in scope `auto`. That is harmless, because scope `auto` never replaces the agent's own state. An optional later awt change is to skip turns whose user message is `/compact` or starts `[pcic`. It is not in v1.
 
@@ -362,3 +361,4 @@ Known interaction: after the `/compact` turn, the awt plugin's stand-in handoff 
 | R47 | T40, E20 |
 | R48 | T41, E20 |
 | R49 | T42, E20 |
+| R50 | T43, E20 |

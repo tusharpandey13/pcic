@@ -1,10 +1,10 @@
 #!/usr/bin/env node
-// pcic CLI: install [--uninstall] | doctor | hook <event>
+// pcic CLI: install [--uninstall] | doctor | config <key> [value] | hook <event>
 import { accessSync, constants, copyFileSync, existsSync, mkdirSync, readFileSync, readdirSync, realpathSync, renameSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { basename, dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
-import { loadConfig, pcicHome, readJson } from "../server/common.mjs";
+import { loadConfig, pcicHome, readJson, SCHEMA, setConfigKey } from "../server/common.mjs";
 import { run } from "../hook/pcic-hook.mjs";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
@@ -123,6 +123,18 @@ async function readStdin() {
   try { return JSON.parse(Buffer.concat(chunks).toString("utf8")); } catch { return {}; }
 }
 
+/** R50: `config <key>` prints the effective value; `config <key> <value>` validates it against the schema and writes it. Values are JSON when they parse (true, 5000), else text (ask). */
+function configCmd(args, env = process.env) {
+  const [key, raw, ...more] = args;
+  if (!key || more.length || !(key in SCHEMA)) { process.stderr.write(`usage: pcic config <key> [value]\nkeys: ${Object.keys(SCHEMA).join(", ")}\n`); process.exit(2); }
+  if (raw === undefined) { console.log(JSON.stringify(loadConfig(env)[key])); return; }
+  let value = raw;
+  try { value = JSON.parse(raw); } catch {}
+  const err = setConfigKey(env, key, value);
+  if (err) fail(err, key === "coldChoice" ? "use: pcic config coldChoice ask|resume|checkpoint" : "see SPEC.md, Configuration");
+  console.log(`${key} = ${JSON.stringify(value)}`);
+}
+
 const [cmd, ...args] = process.argv.slice(2);
 if (cmd === "hook") {
   const r = await run(args[0], await readStdin(), process.env);
@@ -131,4 +143,5 @@ if (cmd === "hook") {
   process.stdout.write("", () => process.exit(r.code));
 } else if (cmd === "install") install(args.includes("--uninstall"));
 else if (cmd === "doctor") doctor();
-else { console.error("usage: pcic install [--uninstall] | doctor | hook <event>"); process.exit(2); }
+else if (cmd === "config") configCmd(args);
+else { console.error("usage: pcic install [--uninstall] | doctor | config <key> [value] | hook <event>"); process.exit(2); }

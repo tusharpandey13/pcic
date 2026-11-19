@@ -1,7 +1,9 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { loadConfig, num } from "../server/common.mjs";
-import { tmp, writeConfig, rig, settle } from "./harness.js";
+import { readFileSync, statSync } from "node:fs";
+import { join } from "node:path";
+import { cli, readJsonFile, tmp, writeConfig, rig, settle } from "./harness.js";
 
 // T1 (R43)
 test("T1 no config file: defaults, no warning", () => {
@@ -38,4 +40,23 @@ test("R5 num accepts only finite non-negative numbers", () => {
 void settle;
 test("T1 probeModel defaults to haiku, the cheapest Claude model (R23)", () => {
   const t = tmp(); assert.equal(loadConfig(t.env).probeModel, "haiku"); t.cleanup();
+});
+
+// T43 (R50)
+test("T43 config coldChoice sets the key, keeps the other keys, and the hook obeys it", async () => {
+  const t = tmp(); writeConfig(t, { guard: true, minContextTokens: 5 });
+  const r = await cli(["config", "coldChoice", "resume"], t.env); assert.deepEqual([r.code, r.stdout.trim(), r.stderr], [0, 'coldChoice = "resume"', ""]);
+  assert.deepEqual(readJsonFile(join(t.home, "config.json")), { guard: true, minContextTokens: 5, coldChoice: "resume" });
+  assert.equal((await cli(["config", "coldChoice"], t.env)).stdout.trim(), '"resume"');
+  assert.equal((await cli(["config", "coldChoice", "ask"], t.env)).code, 0); assert.equal(loadConfig(t.env).coldChoice, "ask"); t.cleanup();
+});
+test("T43 config creates the file when missing, parses numbers, and rejects bad keys and values without touching the file", async () => {
+  const t = tmp(); const ok = await cli(["config", "freshContextTokens", "30000"], t.env); assert.equal(ok.code, 0); assert.equal(readJsonFile(join(t.home, "config.json")).freshContextTokens, 30000);
+  const before = readFileSync(join(t.home, "config.json"), "utf8"); const mtime = statSync(join(t.home, "config.json")).mtimeMs;
+  for (const args of [["coldChoice", "always"], ["freshContextTokens", "-1"], ["guard", "maybe"]]) { const r = await cli(["config", ...args], t.env); assert.equal(r.code, 1, args.join(" ")); assert.match(r.stderr, /^error: .*\nfix: /); }
+  for (const args of [[], ["nosuchkey", "1"], ["coldChoice", "a", "b"]]) assert.equal((await cli(["config", ...args], t.env)).code, 2, args.join(" "));
+  assert.equal(readFileSync(join(t.home, "config.json"), "utf8"), before); assert.equal(statSync(join(t.home, "config.json")).mtimeMs, mtime); t.cleanup();
+});
+test("T43 config refuses a config file it cannot parse", async () => {
+  const t = tmp(); writeConfig(t, "{not json"); const r = await cli(["config", "coldChoice", "resume"], t.env); assert.equal(r.code, 1); assert.equal(readFileSync(join(t.home, "config.json"), "utf8"), "{not json"); t.cleanup();
 });
