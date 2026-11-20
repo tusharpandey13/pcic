@@ -11,7 +11,7 @@ const cold = (t: Tmp, o = {}) => transcript(t, [asst({ at: T0, tokens: 182000, u
 // T26 (R31)
 test("T26 all conditions true: exactly one combination blocks", async () => {
   const t = tmp(); const p = cold(t); const r = await run(t, p, "ZQX-PROMPT continue");
-  assert.equal(r.code, 2); assert.equal(r.stdout, ""); assert.match(r.stderr, /^pcic: this agent's prompt cache has likely expired \(idle 2h14m; cache lasts 1h\)\. Context ~182K tokens\./); t.cleanup();
+  assert.equal(r.code, 2); assert.equal(r.stdout, ""); assert.match(r.stderr, /^pcic: this agent's prompt cache has likely expired \(idle 2h14m; cache lasts 1h\)\. Context about 182K tokens\./); t.cleanup();
 });
 test("T26 each condition false in turn passes silently", async () => {
   const cases: [string, (t: Tmp) => { p: string; prompt?: string; extra?: Record<string, string> }][] = [
@@ -57,16 +57,16 @@ test("T27 marker dir not writable: the guard passes, never blocks", async () => 
 test("T27 message: template, computed figures, at most 600 chars, prompt echoed, no history leak", async () => {
   const t = tmp(); const r = await run(t, cold(t), "ZQX-PROMPT continue with the parser");
   assert.ok(r.stderr.length <= 601, String(r.stderr.length));
-  assert.match(r.stderr, /Sending now rewrites the whole context: ~\$1\.82 \(estimate; on a subscription, plan usage\)\./); // 182K x $10/M (opus 4.8, 1h write)
+  assert.match(r.stderr, /Sending now rewrites the whole context: about \$1\.82 \(estimate; on a subscription, plan usage\)\./); // 182K x $10/M (opus 4.8, 1h write)
   assert.match(r.stderr, /- Send the same message again: full context, no second stop\./);
-  assert.match(r.stderr, /- Or send \/compact first: ~\$0\.96 once \(estimate\), then the context is about 15K tokens\./); // 182K x $5/M + 2K x $25/M
+  assert.match(r.stderr, /- Or send \/compact first: about \$0\.96 once \(estimate\), then the context is about 15K tokens\./); // 182K x $5/M + 2K x $25/M
   assert.match(r.stderr, /- Or send \/clear: start empty \(the awt brief is added back when AWT_DIR is set\)\./);
   assert.match(r.stderr, /Your message: "ZQX-PROMPT continue with the parser"/);
   assert.ok(!JSON.stringify(historyOf(t)).includes("ZQX-PROMPT")); t.cleanup();
 });
 test("T27 unknown model: no dollar figures, token figures kept", async () => {
   const t = tmp(); const r = await run(t, cold(t, { model: "mystery-model-9" }), "x"); assert.equal(r.code, 2);
-  assert.ok(!r.stderr.includes("$")); assert.match(r.stderr, /~182K tokens/); assert.match(r.stderr, /\/compact first, then the context is about 15K tokens/); t.cleanup();
+  assert.ok(!r.stderr.includes("$")); assert.match(r.stderr, /about 182K tokens/); assert.ok(!r.stderr.includes("~")); assert.match(r.stderr, /\/compact first, then the context is about 15K tokens/); t.cleanup();
 });
 test("T27 a long prompt is truncated in the echo and the message stays within 600 chars", async () => {
   const t = tmp(); const r = await run(t, cold(t), "ZQX-PROMPT " + "w".repeat(3000)); assert.ok(r.stderr.length <= 601); t.cleanup();

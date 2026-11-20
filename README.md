@@ -42,10 +42,10 @@ pcic acts at most once per idle period, only when the agent is idle, only when t
 If the timer missed (the Mac was asleep, the daemon was down, or the agent was opted out), the first prompt after the cache expired is blocked once, at no cost. The block is plain text, ending in a machine-readable card line:
 
 ```
-pcic: this agent's prompt cache has likely expired (idle 2h14m; cache lasts 1h). Context ~182K tokens.
-Sending now rewrites the whole context: ~$1.09 (estimate; on a subscription, plan usage).
+pcic: this agent's prompt cache has likely expired (idle 2h14m; cache lasts 1h). Context about 182K tokens.
+Sending now rewrites the whole context: about $1.09 (estimate; on a subscription, plan usage).
 - Send the same message again: full context, no second stop.
-- Or send /compact first: ~$0.55 once (estimate), then the context is about 15K tokens.
+- Or send /compact first: about $0.55 once (estimate), then the context is about 15K tokens.
 - Or send /clear: start empty (the awt brief is added back when AWT_DIR is set).
 Your message: "first words of your prompt"
 [pcic-card v1 0123456789abcdef idle=8040000 tokens=182000 resume=1.09 compact=0.55 checkpoint=0.13 awt=1]

@@ -5,7 +5,7 @@ import { COLD_MARK, TEXT_TYPES, cardDataSchema, findCard, itemText, parseCardLin
 
 const card = { cardId: "0123456789abcdef", idleMs: 48_840_000, tokens: 132_000, awt: true, auto: false, est: { resume: 0.33, compact: 0.2, checkpoint: 0.0123 } };
 const line = cardLine(card);
-const text = (extra = "") => `${COLD_MARK} (idle 13h; cache lasts 1h). Context ~132K tokens.\n- Send the same message again: full context, no second stop.\n${extra}${line}`;
+const text = (extra = "") => `${COLD_MARK} (idle 13h; cache lasts 1h). Context about 132K tokens.\n- Send the same message again: full context, no second stop.\n${extra}${line}`;
 
 // T38 (R45)
 test("T38 a valid card line parses to the card data (the hook's cardLine and the parser agree)", () => {

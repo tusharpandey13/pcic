@@ -304,7 +304,7 @@ test("phase 2 runs E8 E9 E10 after a stopped daemon", { skip: !(ON && PAID && wa
       const s = sess(id); const before = spend(true); const n0 = asstCount(id);
       await pas("agent", "send", id, "ZQX-PROMPT continue");
       const tl = await timeline(id); const blocked = tl.find((x) => x.text.includes("pcic: this agent's prompt cache has likely expired")); assert.ok(blocked, JSON.stringify(tl.slice(-3)));
-      const m = /Context ~(\d+)K/.exec(blocked!.text); assert.ok(m && Math.abs(Number(m[1]) * 1000 - s.contextTokens) <= 0.1 * s.contextTokens + 500, `context figure ${m?.[1]}K vs ${s.contextTokens}`);
+      const m = /Context about (\d+)K/.exec(blocked!.text); assert.ok(m && Math.abs(Number(m[1]) * 1000 - s.contextTokens) <= 0.1 * s.contextTokens + 500, `context figure ${m?.[1]}K vs ${s.contextTokens}`);
       assert.equal(asstCount(id), n0, "the blocked turn made a request"); assert.ok(spend(true) - before < 0.002, "blocked turn cost money");
       assert.ok(existsSync(join(pcic, "guard", `${s.sessionId}.json`)));
       await pas("agent", "send", id, "ZQX-PROMPT continue"); await idle(id);

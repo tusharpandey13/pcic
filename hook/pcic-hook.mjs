@@ -67,14 +67,15 @@ async function preCompact(_input, env, cfg, home) {
 const fmtTtl = (s) => (s % 3600 === 0 ? `${s / 3600}h` : s % 60 === 0 ? `${s / 60}m` : `${s}s`);
 const fmtIdle = (s) => { const m = Math.floor(s / 60); return m >= 60 ? `${Math.floor(m / 60)}h${String(m % 60).padStart(2, "0")}m` : `${m}m`; };
 const kfmt = (n) => (n >= 1000 ? `${Math.round(n / 1000)}K` : String(n));
-const usd = (n) => `~$${n.toFixed(2)}`;
+// "about", not "~": Paseo renders the block as markdown, and two "~" turn the text between them into strikethrough.
+const usd = (n) => `about $${n.toFixed(2)}`;
 
-/** R33. Every figure is computed; at most 600 characters including the card line (R44). Without a known model the `~$` figures are left out. */
+/** R33. Every figure is computed; at most 600 characters including the card line (R44). Without a known model the dollar figures are left out. */
 export function blockMessage({ idleS, ttlS, tokens, model, cfg, prompt, card = null }) {
   const p = priceFor(model, cfg);
   const resend = p ? `: ${usd((tokens * p[ttlS <= 300 ? "write5m" : "write1h"]) / 1e6)} (estimate; on a subscription, plan usage).` : ".";
   const compact = p ? `${usd((tokens * p.input + 2000 * p.output) / 1e6)} once (estimate), then` : "first, then";
-  const head = `pcic: this agent's prompt cache has likely expired (idle ${fmtIdle(idleS)}; cache lasts ${fmtTtl(ttlS)}). Context ~${kfmt(tokens)} tokens.`;
+  const head = `pcic: this agent's prompt cache has likely expired (idle ${fmtIdle(idleS)}; cache lasts ${fmtTtl(ttlS)}). Context about ${kfmt(tokens)} tokens.`;
   const lines = card?.auto
     ? [head, "pcic is continuing from a checkpoint (your setting): /clear, then your message. To be asked instead: pcic config coldChoice ask"]
     : [

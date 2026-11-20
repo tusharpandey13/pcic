@@ -3,6 +3,7 @@
 ## 0.2.1 (20-Nov-2026)
 
 - Fix: the cold-return card never appeared in the app. Paseo only accepts plugin ids and kinds made of lowercase letters, digits and dashes, and it dropped pcic's whole client entry because the transformer ids (`pcic.cold-card.user_message`) and the renderer kind (`pcic.coldCard`) broke that rule. They are now `pcic-cold-card-<item-type>` and `pcic-cold-card`, and a test checks them against Paseo's rule.
+- Fix: the plain-text block says "about $1.25" and "about 156K tokens" instead of "~$1.25" and "~156K". Paseo renders the block as markdown, and the two "~" turned the text between them into strikethrough.
 
 ## 0.2.0 (19-Nov-2026)
 

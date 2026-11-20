@@ -213,10 +213,10 @@ Skip reasons: `late`, `small`, `unknown_context`, `not_idle`, `background_work`,
 - **R33** The block message has this form, with every figure computed and the whole message, card line included, at most 600 characters:
 
   ```
-  pcic: this agent's prompt cache has likely expired (idle 2h14m; cache lasts 1h). Context ~182K tokens.
-  Sending now rewrites the whole context: ~$1.09 (estimate; on a subscription, plan usage).
+  pcic: this agent's prompt cache has likely expired (idle 2h14m; cache lasts 1h). Context about 182K tokens.
+  Sending now rewrites the whole context: about $1.09 (estimate; on a subscription, plan usage).
   - Send the same message again: full context, no second stop.
-  - Or send /compact first: ~$0.55 once (estimate), then the context is about 15K tokens.
+  - Or send /compact first: about $0.55 once (estimate), then the context is about 15K tokens.
   - Or send /clear: start empty (the awt brief is added back when AWT_DIR is set).
   Your message: "first 60 characters"
   [pcic-card v1 <cardId> idle=<ms> tokens=<n> resume=<usd|-> compact=<usd|-> checkpoint=<usd|-> awt=<0|1>]
