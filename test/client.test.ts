@@ -1,7 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { cardLine } from "../server/card.mjs";
-import { COLD_MARK, TEXT_TYPES, cardDataSchema, findCard, itemText, parseCardLine, transformText, viewModel, resultText, pendingText, fmtUsd } from "../shared/cold-card.js";
+import { COLD_MARK, TEXT_TYPES, cardDataSchema, findCard, itemText, parseCardLine, transformText, transformerId, PASEO_ID, CARD_KIND, viewModel, resultText, pendingText, fmtUsd } from "../shared/cold-card.js";
 
 const card = { cardId: "0123456789abcdef", idleMs: 48_840_000, tokens: 132_000, awt: true, auto: false, est: { resume: 0.33, compact: 0.2, checkpoint: 0.0123 } };
 const line = cardLine(card);
@@ -20,9 +20,9 @@ test("T38 no card line, or a malformed one: the item is left alone", () => {
   assert.equal(transformText("hello"), undefined);
   for (const v of [null, undefined, 5, {}, []]) assert.equal(transformText(v), undefined);
 });
-test("T38 a valid block text becomes one pcic.coldCard v1 plugin item holding only the card data", () => {
+test("T38 a valid block text becomes one pcic-cold-card v1 plugin item holding only the card data", () => {
   const r = transformText(text("Your message: \"x\"\n"));
-  assert.deepEqual(r, { items: [{ type: "plugin", kind: "pcic.coldCard", version: 1, data: parseCardLine(line) }] });
+  assert.deepEqual(r, { items: [{ type: "plugin", kind: "pcic-cold-card", version: 1, data: parseCardLine(line) }] });
   assert.ok(cardDataSchema.safeParse(r?.items[0].data).success); assert.ok(!JSON.stringify(r).includes("Your message"));
 });
 test("T38 any item type that carries text is read, and the output is deterministic", () => {
@@ -33,6 +33,12 @@ test("T38 any item type that carries text is read, and the output is determinist
   }
   assert.equal(itemText({ type: "reasoning", text: text() }), null); assert.equal(itemText({ type: "user_message" }), null); assert.equal(itemText(null), null);
   assert.equal(findCard(`${text()}\n${cardLine({ ...card, cardId: "fedcba9876543210" })}`)?.cardId, "fedcba9876543210"); // the last valid line wins
+});
+
+test("T38 every transformer id and the renderer kind pass Paseo's id check (an invalid one drops the whole client entry)", () => {
+  assert.ok(PASEO_ID.test(CARD_KIND), CARD_KIND);
+  for (const type of TEXT_TYPES) assert.ok(PASEO_ID.test(transformerId(type)), transformerId(type));
+  assert.equal(new Set(TEXT_TYPES.map(transformerId)).size, TEXT_TYPES.length);
 });
 
 // T39 (R46): the pure view logic

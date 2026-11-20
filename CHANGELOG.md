@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.2.1 (20-Nov-2026)
+
+- Fix: the cold-return card never appeared in the app. Paseo only accepts plugin ids and kinds made of lowercase letters, digits and dashes, and it dropped pcic's whole client entry because the transformer ids (`pcic.cold-card.user_message`) and the renderer kind (`pcic.coldCard`) broke that rule. They are now `pcic-cold-card-<item-type>` and `pcic-cold-card`, and a test checks them against Paseo's rule.
+
 ## 0.2.0 (19-Nov-2026)
 
 - Cold-return card: when the guard blocks a prompt, the Paseo app shows a choice card (resume with full context, compact first, or continue from a checkpoint with `/clear`, with "don't ask again" variants) and pcic sends your blocked prompt for you after the pick (R44..R49). The prompt is kept only in `cards/<id>.json` (mode 0600, 24 hours). The plain-text block stays as the fallback.

@@ -396,7 +396,7 @@ const cardFiles = () => (existsSync(join(pcic, "cards")) ? readdirSync(join(pcic
 const CARD_RE = /\[pcic-card v1 ([0-9a-f]{16}) [^\]]*\]/;
 test("V13 the Paseo plugin builder bundles the client entry of a local install (free)", { skip: !ON }, async () => {
   const cat = await wsCall("plugin.catalog.get.request", {}, "plugin.catalog.get.response"); const p = cat.plugins.find((x: any) => x.id === "pcic"); assert.ok(p?.clientBundle, "no client bundle for pcic");
-  assert.ok(/pcic\.cold-card/.test(p.clientBundle) && /pcic\.coldCard/.test(p.clientBundle) && /pcic-card v1/.test(p.clientBundle), "the bundle lacks the transformer, the renderer kind or the card line");
+  assert.ok(/pcic-cold-card-user-message/.test(p.clientBundle) && /"pcic-cold-card"/.test(p.clientBundle) && /pcic-card v1/.test(p.clientBundle), "the bundle lacks the transformer, the renderer kind or the card line");
   logLine(`V13 PASS client bundle ${p.clientBundle.length} bytes, hash ${p.clientBundleHash}`);
 });
 const lastUsage = (id: string) => transcript(id).filter((e) => e.type === "assistant" && e.message?.usage).pop()?.message?.usage;

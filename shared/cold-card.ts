@@ -5,7 +5,9 @@ import { z } from "zod";
 
 /** The block text of the guard (R33) starts with this; the transformer needs it plus a card line (R45). */
 export const COLD_MARK = "pcic: this agent's prompt cache has likely expired";
-export const CARD_KIND = "pcic.coldCard";
+/** Paseo 0.16.2 rejects a plugin id or kind that does not match this (the app throws, and the whole client entry is dropped). */
+export const PASEO_ID = /^[a-z][a-z0-9-]*$/;
+export const CARD_KIND = "pcic-cold-card";
 export const CARD_VERSION = 1;
 
 export const cardDataSchema = z.object({
@@ -50,6 +52,8 @@ export function findCard(text: unknown): CardData | null {
 /** The item types whose text can carry the hook's stderr (V11: which one Paseo uses is unverified, so the client registers a transformer for each). */
 export const TEXT_TYPES = ["user_message", "assistant_message", "error", "notification"] as const;
 export type TextType = (typeof TEXT_TYPES)[number];
+/** The transformer id for one item type, e.g. `pcic-cold-card-user-message` (must match PASEO_ID). */
+export const transformerId = (itemType: TextType): string => `pcic-cold-card-${itemType.replace(/_/g, "-")}`;
 /** The text of an item of one of TEXT_TYPES. */
 export const itemText = (item: unknown): string | null => {
   const i = item as { type?: unknown; text?: unknown; message?: unknown } | null;

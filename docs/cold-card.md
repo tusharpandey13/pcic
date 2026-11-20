@@ -27,7 +27,7 @@ Today the pcic guard (R31..R34) blocks the prompt for free and prints text listi
    - appends one last line to the R33 text: `[pcic-card v1 <cardId> idle=<ms> tokens=<n> resume=<usd|-> compact=<usd|-> checkpoint=<usd|-> awt=<0|1>]`. The text stays readable, and the transformer parses only this line.
 
    The prompt is stored only in the card file, never in history or the timeline.
-2. **Client transformer.** It matches a timeline item of any type whose text contains `pcic: this agent's prompt cache has likely expired` and a parseable `[pcic-card v1 ...]` line. It replaces that item with the plugin item `pcic.coldCard` v1 `{cardId, idleMs, tokens, resume, compact, checkpoint, awt}`. Nothing matches, so nothing changes, when the plugin client isn't loaded. The plain text is the fallback, so R33's three ways out stay.
+2. **Client transformer.** It matches a timeline item of any type whose text contains `pcic: this agent's prompt cache has likely expired` and a parseable `[pcic-card v1 ...]` line. It replaces that item with the plugin item `pcic-cold-card` v1 `{cardId, idleMs, tokens, resume, compact, checkpoint, awt}`. Nothing matches, so nothing changes, when the plugin client isn't loaded. The plain text is the fallback, so R33's three ways out stay.
 3. **Renderer.** It shows the header `Cache expired <idle> ago. Context: <N>K tokens.` and these radio options:
    - `Resume full context ~$X`
    - `Continue from checkpoint ~$Y (new session: awt brief + your message)`. Only when `awt`; without awt the label is `Start fresh ~$Y (new session: your message only)`.
