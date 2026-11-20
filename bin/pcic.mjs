@@ -102,8 +102,6 @@ function doctor(env = process.env) {
   list("SessionStart").some((h) => String(h.command ?? "").includes(AWT_MARK)) ? ok("awt compact hook present") : bad("awt's SessionStart compact hook is not installed; the awt brief would be missing after compaction", "awt init --hooks claude");
   env.AWT_COMPACT_BRIEF === "1" ? bad("AWT_COMPACT_BRIEF=1 is set; the brief would arrive twice", "unset AWT_COMPACT_BRIEF in the daemon environment") : ok("AWT_COMPACT_BRIEF not set");
   const home = pcicHome(env);
-  const v = existsSync(join(home, "verdict.json")) ? readJson(join(home, "verdict.json")) : undefined;
-  v === undefined || (v && ["plugin", "cli"].includes(v.mode) && typeof v.paseoVersion === "string") ? ok("verdict ok") : bad("verdict.json is invalid", `delete ${join(home, "verdict.json")}`);
   const p = existsSync(join(home, "pause.json")) ? readJson(join(home, "pause.json")) : undefined;
   p === undefined || (p && Number.isFinite(p.until)) ? ok("pause state ok") : bad("pause.json is invalid", `delete ${join(home, "pause.json")}`);
   const warns = [];

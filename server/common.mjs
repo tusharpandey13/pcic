@@ -25,7 +25,7 @@ export const SCHEMA = {
   exclude: [[], (v) => Array.isArray(v) && v.every(str)], maxConcurrent: [2, int(1)], staggerSeconds: [15, int(0)],
   maxJobsPerHour: [30, int(0)], checkpointTimeoutSeconds: [300, int(1)], compactTimeoutSeconds: [300, int(1)],
   pauseMinutes: [60, int(1)], sweepSeconds: [30, int(1)], sendMode: ["auto", (v) => ["auto", "plugin", "cli"].includes(v)],
-  paseoBin: ["paseo", (v) => str(v) && v.length > 0], probeModel: ["haiku", str],
+  paseoBin: ["paseo", (v) => str(v) && v.length > 0],
   coldChoice: ["ask", (v) => v === "ask" || v === "resume" || v === "checkpoint"], freshContextTokens: [20000, int(0)],
   // $/M tokens per model family, from the Anthropic pricing page (18-Nov-2026). Matched by regex on the model id, first hit wins.
   prices: [null, (v) => v === null || (typeof v === "object" && !Array.isArray(v))],

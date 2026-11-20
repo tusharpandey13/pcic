@@ -2,7 +2,9 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { existsSync, readFileSync, readdirSync, statSync } from "node:fs";
 import { join } from "node:path";
-import { historyOf, idleAgent, readJsonFile, rig, settle, type Rig } from "./harness.js";
+import { T0, historyOf, idleAgent, readJsonFile, rig, settle, type Rig } from "./harness.js";
+import { CHECKPOINT_TEXT } from "../server/types.js";
+import { DUE_ } from "./send-consts.js";
 import { cardPath, usedPath, writeCard } from "../server/card.mjs";
 import { chooseRpc } from "../shared/cold-card.js";
 
@@ -118,6 +120,18 @@ test("T45 R51 every text pcic sends for a card carries a pcic- messageId, so the
   const r = await setup(); mkCard(r, { auto: true }); await r.sweep(); await settle();
   assert.deepEqual(r.paseo.sent.map((s) => [s.text, s.opts?.messageId]), [["/clear", `pcic-clear-${CARD}`], [PROMPT, `pcic-prompt-${CARD}`]]);
   assert.ok(r.paseo.sent.every((s) => s.opts?.activeTurnBehavior === "steer")); r.cleanup();
+});
+// T46 (R52)
+test("T46 R52 the idle job sends the checkpoint and /compact with pcic- messageIds, and its own turns count as own by messageId", async () => {
+  const r = rig(); await idleAgent(r, "a"); r.paseo.sent.length = 0;
+  r.paseo.onSend = async (id, text) => { // a recorded user_message whose text is not the checkpoint text: only its messageId marks it as pcic's
+    const page = r.paseo.agents_.get(id)!.page as any[]; if (text !== "/compact") page[page.length - 1].item.text = "(rewritten by Paseo)";
+    await r.call("agent.turn.before", { agent: { id, provider: "claude", cwd: "/tmp/parsekit", parentAgentId: null }, turnId: `own-${r.paseo.sent.length}` });
+  };
+  r.clock.set(T0 + DUE_ + 1000); await r.sweep(); await r.run();
+  const jobId = r.paseo.sent[0].opts?.messageId as string; assert.match(jobId, /^pcic-checkpoint-[0-9a-f-]{36}$/);
+  assert.deepEqual(r.paseo.sent.map((s) => [s.text === CHECKPOINT_TEXT ? "checkpoint" : s.text, s.opts?.messageId]), [["checkpoint", jobId], ["/compact", jobId.replace("checkpoint", "compact")]]);
+  assert.ok(historyOf(r.t).some((e) => e.event === "compacted"), "not aborted as a foreign turn"); r.cleanup();
 });
 test("T41 the sweep scans too (the fallback), and not while disabled", async () => {
   const r = await setup(); mkCard(r, { auto: true }); await r.sweep(); await settle(); assert.deepEqual(sentTexts(r), ["/clear", PROMPT]); r.cleanup();

@@ -98,15 +98,13 @@ export interface FakeAgent { snap: Snap & { id: string }; page: unknown[]; }
 export class FakePaseo implements PaseoLike {
   agents_ = new Map<string, FakeAgent>();
   sent: { id: string; text: string; opts?: Record<string, unknown> }[] = [];
-  created: Record<string, unknown>[] = [];
   archived: string[] = [];
   perm: string[] = [];
   /** What run()/waitForFinish() return: "idle" resolves, "never" hangs, others are returned as the status. */
-  runStatus = "idle"; failCode = "error"; sendThrows = false; refreshThrows = false; createThrows = false; archiveThrows = false; listThrows = false;
+  runStatus = "idle"; failCode = "error"; sendThrows = false; refreshThrows = false; archiveThrows = false; listThrows = false;
   /** Called for each send/run, after it is recorded. The harness turns it into turn hooks. */
   onSend: (id: string, text: string) => Promise<void> | void = () => {};
   onTurnEnd: (id: string, text: string, outcome: any) => Promise<void> | void = () => {};
-  probeTimeline: unknown[] = [];
   /** While true, waiting turns block until release(). `active` counts turns in flight. */
   hold = false; active = 0; maxActive = 0; gates: (() => void)[] = []; sendTimes: number[] = []; onRefresh: (id: string) => void = () => {}; outcomeKind: "failed" | "canceled" = "failed";
   /** Real Paseo dispatches turn_started before it records the prompt: with lateEcho the user_message lands after turn.before. */
@@ -123,12 +121,6 @@ export class FakePaseo implements PaseoLike {
   agents = {
     ref: (id: string): Handle => this.handle(id),
     list: async () => { if (this.listThrows) throw new Error("list"); return { entries: [...this.agents_.values()].map((a) => ({ agent: a.snap })) }; },
-    create: async (o: Record<string, unknown>): Promise<Handle> => {
-      if (this.createThrows) throw new Error("create");
-      this.created.push(o); const id = `probe_${this.created.length}`;
-      this.add(id, { labels: (o.labels as Record<string, string>) ?? {}, cwd: o.cwd as string });
-      return this.handle(id);
-    },
   };
   private handle(id: string): Handle {
     const a = () => this.agents_.get(id) as FakeAgent;
@@ -136,9 +128,10 @@ export class FakePaseo implements PaseoLike {
       if (this.sendThrows) throw new Error("send refused");
       this.sent.push({ id, text, opts }); this.sendTimes.push(this.now()); this.active++; this.maxActive = Math.max(this.maxActive, this.active);
       const turnId = `own-${this.sent.length}`;
-      if (!this.lateEcho) this.say(id, "user_message", text, {}, turnId);
+      const mid = opts?.messageId ? { messageId: opts.messageId } : {};
+      if (!this.lateEcho) this.say(id, "user_message", text, mid, turnId);
       await this.onSend(id, text);
-      if (this.lateEcho) this.say(id, "user_message", text, {}, turnId);
+      if (this.lateEcho) this.say(id, "user_message", text, mid, turnId);
     };
     const waiting = async (text: string) => {
       if (this.runStatus === "never") return new Promise<never>(() => {});
@@ -157,7 +150,7 @@ export class FakePaseo implements PaseoLike {
       run: async (text, o) => { await record(text, o); return waiting(text); },
       waitForFinish: async () => waiting(last),
       archive: async () => { if (this.archiveThrows) throw new Error("archive"); this.archived.push(id); return { archivedAt: "x" }; },
-      timeline: { refetch: async () => (id.startsWith("probe_") ? { entries: this.probeTimeline } : { entries: a().page }) },
+      timeline: { refetch: async () => ({ entries: a().page }) },
     };
   }
 }
@@ -167,26 +160,24 @@ export interface Rig { t: Tmp; clock: Clock; paseo: FakePaseo; pcic: Pcic; ctx: 
 
 export const agentPayload = (id: string, over: Record<string, unknown> = {}) => ({ id, workspaceId: "wks_1", parentAgentId: null, provider: "claude", cwd: "/tmp/parsekit", title: `Chat ${id}`, ...over });
 
-export interface RigOpts { cfg?: Record<string, unknown>; env?: Record<string, string>; cliTimeoutMs?: number; autoTurn?: boolean; autoCompact?: boolean; version?: string; noVerdict?: boolean }
+export interface RigOpts { cfg?: Record<string, unknown>; env?: Record<string, string>; cliTimeoutMs?: number; autoTurn?: boolean; autoCompact?: boolean }
 /** Config defaults for fast, offline tests: 1h TTL, idle 55 min, a small threshold, no stagger. */
 export function rig(o: RigOpts = {}): Rig {
   const t = tmp(o.env);
   mkdirSync(t.home, { recursive: true });
   writeConfig(t, { staggerSeconds: 0, minContextTokens: 100000, ...o.cfg });
-  if (!o.noVerdict) writeFileSync(join(t.home, "verdict.json"), JSON.stringify({ paseoVersion: o.version ?? "0.16.1", mode: "plugin", at: T0, tries: 0 })); // no probe in ordinary tests
   const clock = new Clock();
   const logs: string[] = [];
   let self: Rig | null = null;
   const paseo = new FakePaseo(() => self);
-  const pcic = createPcic({ env: { ...t.env, PASEO_VERSION: o.version ?? "0.16.1" }, now: clock.now, timer: clock.timer, log: (m) => logs.push(m), cliTimeoutMs: o.cliTimeoutMs, version: async () => o.version ?? "0.16.1" });
+  const pcic = createPcic({ env: t.env, now: clock.now, timer: clock.timer, log: (m) => logs.push(m), cliTimeoutMs: o.cliTimeoutMs });
   paseo.now = clock.now;
   const ctx = { paseo };
   const call = (name: string, payload: unknown) => (pcic.hooks as any)[name](payload, ctx);
   if (o.autoTurn !== false) {
     // Mirrors Paseo: a pcic send starts a turn (turn.before), and the turn ends when the caller waits (turn.after).
-    paseo.onSend = async (id, text) => { if (id.startsWith("probe_")) return; await call("agent.turn.before", { agent: agentPayload(id), turnId: `own-${paseo.sent.length}` }); void text; };
+    paseo.onSend = async (id, text) => { await call("agent.turn.before", { agent: agentPayload(id), turnId: `own-${paseo.sent.length}` }); void text; };
     paseo.onTurnEnd = async (id, text, r) => {
-      if (id.startsWith("probe_")) return;
       if (text === "/compact" && o.autoCompact !== false) { const rec = readJsonFile(join(t.home, "sessions", `${id}.json`)); writeFileSync(rec.transcriptPath, JSON.stringify({ type: "system", subtype: "compact_boundary", timestamp: new Date(clock.now()).toISOString(), compactMetadata: { trigger: "manual", preTokens: 150000, postTokens: 8000 } }) + "\n", { flag: "a" }); }
       await call("agent.turn.after", { agent: agentPayload(id), turnId: "own", outcome: paseo.outcomeKind === "canceled" ? { kind: "canceled", reason: "x" } : r.status === "idle" ? { kind: "completed" } : { kind: "failed", error: { message: "x", code: r.code } } });
     };

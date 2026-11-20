@@ -17,6 +17,10 @@ export const cardDataSchema = z.object({
   awt: z.boolean(), auto: z.boolean(),
 });
 export type CardData = z.infer<typeof cardDataSchema>;
+/** R52: the data of the one quiet grey row (same kind and renderer as the card, a data variant). */
+export const noteDataSchema = z.object({ note: z.string() });
+export type NoteData = z.infer<typeof noteDataSchema>;
+export const rowDataSchema = z.union([cardDataSchema, noteDataSchema]);
 
 export const CHOICES = ["resume", "compact", "checkpoint", "dismiss"] as const;
 export type Choice = (typeof CHOICES)[number];
@@ -69,16 +73,20 @@ export function transformText(text: unknown): PluginTimelineTransformResult | un
 
 /** R51: the messageId prefix pcic puts on every text it sends for a card (`/clear`, `/compact`, the resent prompt). */
 export const MSG_PREFIX = "pcic-";
-export const msgId = (what: "clear" | "compact" | "prompt", cardId: string): string => `${MSG_PREFIX}${what}-${cardId}`;
+export const msgId = (what: "clear" | "compact" | "prompt" | "checkpoint", cardId: string): string => `${MSG_PREFIX}${what}-${cardId}`;
 /** Paseo's own notice after `/clear` (Claude provider, `createClaudeSessionChangedNotice`). */
 export const SESSION_SWITCH = /^Claude switched to a new session: \S+ -> \S+$/;
 const EMPTY: PluginTimelineTransformResult = { items: [] };
+/** R52: the agent's one-line answer to the idle checkpoint, and the row that replaces it. */
+export const CHECKPOINT_SAVED = /^checkpoint saved\.?$/i;
+export const CHECKPOINT_NOTE = "pcic · checkpoint saved before the cache expired";
 
-/** R45, R51: the transform for one timeline item. A row pcic sent, or Paseo's session-switch notice, is removed; a block text becomes the card. */
+/** R45, R51, R52: the transform for one timeline item. A row pcic sent, or Paseo's session-switch notice, is removed; a block text becomes the card. */
 export function transformItem(item: unknown): PluginTimelineTransformResult | undefined {
   const i = item as { type?: unknown; messageId?: unknown; text?: unknown } | null;
   if (i?.type === "user_message" && typeof i.messageId === "string" && i.messageId.startsWith(MSG_PREFIX)) return EMPTY;
   if (i?.type === "assistant_message" && typeof i.text === "string" && SESSION_SWITCH.test(i.text.trim())) return EMPTY;
+  if (i?.type === "assistant_message" && typeof i.text === "string" && CHECKPOINT_SAVED.test(i.text.trim())) return { items: [{ type: "plugin", kind: CARD_KIND, version: CARD_VERSION, data: { note: CHECKPOINT_NOTE } }] };
   return transformText(itemText(item));
 }
 

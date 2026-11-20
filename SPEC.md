@@ -32,7 +32,7 @@ The only expensive event is a request against a large context whose cache has ex
 
 | Component | Runs in | Does |
 |---|---|---|
-| Plugin `pcic` (`index.server.ts`) | Paseo daemon (plugin subprocess) | Tracks claude agents, the sweeper, the job queue, the send adapter, the startup self-test, env injection at `agent.open.before`, history, the cold-return card's RPC `pcic.choose`, the `cards/` watcher and card expiry (R47..R49) |
+| Plugin `pcic` (`index.server.ts`) | Paseo daemon (plugin subprocess) | Tracks claude agents, the sweeper, the job queue, the send adapter, env injection at `agent.open.before`, history, the cold-return card's RPC `pcic.choose`, the `cards/` watcher and card expiry (R47..R49) |
 | Plugin client `pcic` (`index.client.tsx`, `client/`, `shared/`) | Paseo app | Timeline transformers that turn the guard's block text into the card item, and the card renderer (R45, R46) |
 | Hook script `hook/pcic-hook.mjs` (plain Node, no dependencies) | Claude Code, inside each Paseo claude agent | `Stop`: writes the session record. `PreCompact`: prints summary instructions. `UserPromptSubmit`: the cold-return guard |
 | CLI `bin/pcic.mjs` | the owner's shell | `install [--uninstall]` (hook entries), `doctor` (read-only checks), `config <key> [value]` (R50), `hook <event>` (what Claude Code calls) |
@@ -42,7 +42,7 @@ The plugin SDK gives the server entry no Paseo client; a hook context does. So t
 
 **Limitation after a daemon restart.** Checked against the Paseo 0.16.1 plugin SDK types and the app bundle (18-Nov): there is no start, ready or daemon-boot hook. The hook names are `workspace.create/archive`, `worktree.create`, `agent.create/open/close/archive/turn/permission` and nothing else; a server entry receives only a `PluginServerContext` with no client; `handle()` RPCs and subscriptions and `registerSettings` give a client only when someone calls them. So after a restart nothing runs until an agent opens, finishes a turn, asks for a permission or is created. The cold-return guard (R31..R34) is a Claude Code hook and does not depend on the plugin, so it covers that window: an agent that went cold in the meantime is blocked once on the owner's next prompt. Revisit when the SDK adds a start hook.
 
-The only client UI is the cold-return card (R45, R46). The checkpoint prompt and `/compact` are visible in the chat, and the guard's message shows there too, as plain text when the client entry is not loaded.
+The only client UI is the cold-return card (R45, R46). The checkpoint prompt and `/compact` are hidden in the chat (R52) and the agent's `checkpoint saved` reply is drawn as one grey row; the guard's message shows as the card, or as plain text when the client entry is not loaded.
 
 ## File layout
 
@@ -57,8 +57,8 @@ pcic/
   server/config.ts       config file, env overrides, validation
   server/scheduler.ts    per-agent state, sweeper, queue
   server/job.ts          checkpoint + compact sequence
-  server/send.ts         send adapter (plugin | cli) and self-test
-  server/store.ts        state dir: claims, pending, verdict, pause, history
+  server/send.ts         send adapter (plugin | cli)
+  server/store.ts        state dir: claims, pending, pause, history
   hook/pcic-hook.mjs      Stop, PreCompact, UserPromptSubmit
   server/card.mjs        card file and tag line (R44), plain Node, shared by hook and plugin
   server/common.mjs      plain-Node helpers used by hook, CLI and plugin (the plugin builder accepts only client/, server/, shared/; shared/ bans node: imports)
@@ -78,7 +78,6 @@ State dir `PCIC_HOME`, default `${XDG_DATA_HOME:-~/.local/share}/pcic`:
 | `pending/<agentId>.json` | plugin | `{at, jobId}`, written just before `/compact` (R18, R30) |
 | `guard/<sessionId>.json` | guard hook | `{lastAssistantUuid, at}` (R32) |
 | `cards/<cardId>.json` | guard hook | the cold-return card, mode 0600, holds the owner's blocked prompt (R44). `<cardId>.used` replaces it when claimed (R47) |
-| `verdict.json` | plugin | `{paseoVersion, mode, at, tries}` (R22) |
 | `pause.json` | plugin | `{until, reason}` (R27) |
 | `history.jsonl` | plugin and hooks | event log (R40) |
 
@@ -107,18 +106,17 @@ One JSON file, `$PCIC_HOME/config.json`. The plugin rereads it when its mtime ch
 | `checkpointTimeoutSeconds` / `compactTimeoutSeconds` | `300` / `300` | Waits |
 | `pauseMinutes` | `60` | Global pause after a rate, usage or auth error (R27) |
 | `sweepSeconds` | `30` | Sweeper period |
-| `sendMode` | `"auto"` | `auto` (the self-test decides), `plugin` or `cli` |
+| `sendMode` | `"auto"` | `auto` or `plugin` (both mean plugin), or `cli` (manual fallback) |
 | `paseoBin` | `"paseo"` | CLI used by the fallback adapter |
 | `coldChoice` | `"ask"` | What the guard does when it would block: `ask` (the card, R44..R47), `resume` (pass the prompt, R31) or `checkpoint` (block, then pcic runs `/clear` and sends the prompt itself, R48) |
 | `freshContextTokens` | `20000` | Tokens a fresh session starts with (Claude Code's system prompt and tools); used only for the card's `checkpoint` estimate (R44, V12) |
-| `probeModel` | `"haiku"` (the cheapest Claude model; Paseo passes it as `claude/haiku`) | Self-test agent model; `""` means Paseo's default Claude model |
 | `prices` | published per-model prices, filled in at implementation from the pricing page (not from memory) | $/M tokens: `input`, `write1h`, `write5m`, `read`, `output` per model family. Used only for the guard's estimate |
 
 ## State machine (per claude agent, plugin side)
 
 | State | Entered when | Leaves to |
 |---|---|---|
-| `untracked` | Not eligible for good: provider not `claude`, `pcic=off` label, probe agent, archived | none (archived) or `idle_wait` (label removed) |
+| `untracked` | Not eligible for good: provider not `claude`, `pcic=off` label, archived | none (archived) or `idle_wait` (label removed) |
 | `active` | A foreign turn starts (`agent.turn.before`, not pcic's own) | `idle_wait` at that turn's `agent.turn.after` |
 | `idle_wait {anchor, due, deadline}` | `agent.turn.after` of a foreign turn, or a rebuild at start (R37) | `queued` at `due`; `skipped(late)` past `deadline` |
 | `queued` | Sweep at `due` with the pre-checks passing | `checkpoint` or `compact` at dequeue; `skipped(reason)` |
@@ -168,10 +166,10 @@ Skip reasons: `late`, `small`, `unknown_context`, `not_idle`, `background_work`,
 ### Send adapter
 
 - **R21** The adapter has two modes. `plugin` (the primary mode) uses `agents.ref(id).send` and `run`, never with a `sourceAgentId` option, so the text arrives plain, and always with `activeTurnBehavior: "steer"` (R26). `cli` is the fallback (R24). With `sendMode` set to `plugin` or `cli`, that mode is forced.
-- **R22** With `auto`, the mode comes from `verdict.json` when it matches the running Paseo version. With no verdict, the startup self-test (R23) runs once, 60 s after start, when no job is queued. Until there is a verdict, `plugin` is used: it is primary and confirmed from source. The verdict decides whether to switch to `cli`.
-- **R23** The self-test creates a claude agent with model `probeModel` in `$PCIC_HOME/probe/` (an empty directory) with label `pcic=probe` and sends `/compact` through the plugin handle. The verdict is `plugin` when the turn's `user_message` text has no `<paseo-system` and no `assistant_message` appears within 60 s (the local reply `Error: No messages to compact`, which an empty probe session gives at no cost, does not count). If the envelope or a model reply appears, the verdict is `cli`. The probe agent is always archived, on every path. A self-test that errors records no verdict and tries again at the next start, at most 3 times per Paseo version, then `plugin` stays. Probe agents are `untracked` (R1, R10).
+- **R22** (removed by R53) The mode is `plugin` unless `sendMode` is `cli`. There is no `verdict.json`, no startup self-test and no probe agent. `auto` and `plugin` both mean `plugin`; a `verdict.json` left by 0.2.2 or earlier is ignored.
+- **R23** (removed by R53) pcic creates no agent, so there is nothing to archive and no `pcic=probe` label to exclude.
 - **R24** The `cli` mode spawns `paseoBin agent send --behavior steer <id> <text>`, with arguments as an array and no shell. Its env is the plugin's env with `PASEO_AGENT_ID`, `PASEO_AGENT_CWD` and `PASEO_WORKSPACE_ID` removed. The timeout is 30 s, after which the child is killed. A non-zero exit or a timeout ends the job with `send_failed`. Completion is then awaited through `agent.turn.after` and the timeline, as in R15 and R19.
-- **R25** In `plugin` mode, a `/compact` turn whose `user_message` carries the envelope, or which produced an `assistant_message`, ends the job `compact_failed` and sets the verdict to `cli` for this Paseo version.
+- **R25** (removed by R53) A `/compact` turn is never taken as proof that the send was enveloped, and pcic never switches to `cli` by itself. Only the owner's `sendMode` `cli` selects it.
 - **R26** pcic never sends to an agent that is not idle. With no source, Paseo's default `activeTurnBehavior` is `interrupt`, so a send to a running agent would kill the owner's turn. The idle check of R10 runs in the same tick as the send, and both modes pass `steer` for the residual race: a send that loses it is added to the owner's turn instead of killing it (Paseo falls back to interrupt where a provider cannot steer). If a foreign turn starts within 2 s after a pcic send, the history gets `race` so the residual window is visible.
 
 ### Pause
@@ -231,19 +229,19 @@ Skip reasons: `late`, `small`, `unknown_context`, `not_idle`, `background_work`,
 
 - **R35** An agent label `pcic=off` makes the agent `untracked` from the next sweep. At `agent.open.before` the plugin adds `PCIC_OFF=1` to the env of opted-out agents, so their hooks pass. A label added later reaches the guard at the agent's next open; the timer obeys it at the next check (R10), before any send. `exclude` works like the label.
 - **R36** At `agent.open.before`, the plugin adds `PCIC_HOME` (its own value) to the env of claude agents, so the hooks of an isolated daemon find the isolated state dir. Without it, the hook uses the default `PCIC_HOME`.
-- **R37** At plugin start, the plugin loads claims, verdict and pause, then lists the agents. For each eligible claude agent, the anchor is the later of `lastActivityAt` and the session record's `lastAssistantAt`, and R6 to R9 apply. Context comes from `lastUsage`, or from `contextTokens` in the session record when `lastUsage` is zero or missing (as it can be after a daemon restart).
+- **R37** At plugin start, the plugin loads claims and pause, then lists the agents. For each eligible claude agent, the anchor is the later of `lastActivityAt` and the session record's `lastAssistantAt`, and R6 to R9 apply. Context comes from `lastUsage`, or from `contextTokens` in the session record when `lastUsage` is zero or missing (as it can be after a daemon restart).
 - **R38** A `jobs/<agentId>.json` found at start belongs to a job a reload or restart cut short. It is logged `interrupted` and removed. Its claim stays, so the job is never resumed or repeated.
 - **R39** The plugin's cleanup function stops the sweeper, kills any CLI child it spawned and writes nothing more.
-- **R40** `history.jsonl` gets one JSON line per event: `{v:1, at, agent, event, reason?, tokens?, pre?, post?, mode?, ms?, choice?, always?}`. Events: `scheduled`, `skipped`, `checkpoint_ok`, `checkpoint_failed`, `compacted`, `compact_unverified`, `compact_failed`, `aborted`, `interrupted`, `race`, `paused`, `probe`, `guard_block`, `guard_pass_marker`, `guard_pass_setting`, `precompact`, `card_choice`, `card_failed`. The optional fields `choice` (`resume`, `compact`, `checkpoint`, `dismiss`) and `always` (boolean) belong to the card events. Lines never hold prompt, reply or summary text, cwd or file paths. The file is rotated at 5 MB, keeping one `.1`. A write failure is logged once and changes no decision.
+- **R40** `history.jsonl` gets one JSON line per event: `{v:1, at, agent, event, reason?, tokens?, pre?, post?, mode?, ms?, choice?, always?}`. Events: `scheduled`, `skipped`, `checkpoint_ok`, `checkpoint_failed`, `compacted`, `compact_unverified`, `compact_failed`, `aborted`, `interrupted`, `race`, `paused`, `guard_block`, `guard_pass_marker`, `guard_pass_setting`, `precompact`, `card_choice`, `card_failed`. The optional fields `choice` (`resume`, `compact`, `checkpoint`, `dismiss`) and `always` (boolean) belong to the card events. Lines never hold prompt, reply or summary text, cwd or file paths. The file is rotated at 5 MB, keeping one `.1`. A write failure is logged once and changes no decision.
 - **R41** `pcic doctor` is read-only. It checks that:
   - pcic's four hook entries are installed (three, reported as "provided by awt", when awt has its own `SessionStart` `clear` hook, R28);
   - awt's `SessionStart` `compact` entry (`# awt:context`) is present, with a warning when it is not (the awt brief would be missing after compaction);
   - `AWT_COMPACT_BRIEF` is not `1` in the daemon env, with a warning when it is (the brief would arrive twice);
-  - the verdict, the pause state and the config are valid;
+  - the pause state and the config are valid;
   - `PCIC_HOME` is writable.
 
   It exits 0 when everything is ok and 1 on any problem.
-- **R42** pcic sends on its own only three texts: the checkpoint text (R14), `/compact`, and the probe's `/compact`. The only other sends happen on the owner's click on a card (R47) or under the owner's `coldChoice` setting (R48), and are `/clear`, `/compact` and the owner's own blocked prompt, unchanged. The guard's `/clear` offer in the block text is a suggestion, never a send. pcic creates and archives only probe agents. It answers no permission request.
+- **R42** pcic sends on its own only two texts: the checkpoint text (R14) and `/compact`, both with a `pcic-` `messageId` (R52). The only other sends happen on the owner's click on a card (R47) or under the owner's `coldChoice` setting (R48), and are `/clear`, `/compact` and the owner's own blocked prompt, unchanged. The guard's `/clear` offer in the block text is a suggestion, never a send. pcic creates and archives no agents. It answers no permission request.
 - **R43** Config: an invalid value falls back to its default with one warning naming the key, and unknown keys are warned once. A config that cannot be parsed means all defaults plus one warning. Neither stops the plugin.
 
 ### Cold-return card
@@ -263,8 +261,8 @@ The guard still blocks (exit 2): it is the only point that costs nothing, and a 
 - **R49** The sweep deletes every file in `cards/` older than 24 hours (by the card's `createdAt`, else the file time), used or not, even before the plugin has a client. Cards survive a daemon restart, and the transformer works on refetched history, so a card whose block text is still in the history is drawn again and is usable until it is 24 hours old. Timeline rows themselves do not survive a restart.
 - **R50** `pcic config <key>` prints the effective value of a config key as JSON. `pcic config <key> <value>` sets it: the value is read as JSON when it parses (`true`, `30000`) and as text otherwise (`resume`), checked against the same rules as R43, and merged into `config.json` with the atomic write of the state dir, keeping the other keys. A key that does not exist, a value that fails its check or a `config.json` that cannot be parsed gives `error:` and `fix:` lines on stderr and exit 1, and the file is left untouched; a wrong number of arguments gives the usage and exit 2. `pcic config coldChoice ask|resume|checkpoint` is the way back from a "don't ask again" choice.
 - **R51** (owner, 20-Nov-2026) A checkpoint run by `coldChoice` `checkpoint` is quiet in the chat. The client transformers (R45) draw the auto card's block as one small grey row in the style of awt's rows: `pcic · continued from checkpoint · saved about $X (about $Y instead of $Z for the full context)`, where Z is the card's `resume` estimate, Y its `checkpoint` estimate and X = Z - Y; when a figure is null, or Z is not above Y, the row is just `pcic · continued from checkpoint`. It gives no idle time and no setting hint. Every text pcic sends for a card (`/clear`, `/compact`, the resent prompt) carries the Paseo `messageId` `pcic-<clear|compact|prompt>-<cardId>`, and the transformers remove (return `[]`) each `user_message` whose `messageId` starts with `pcic-`, and every `assistant_message` that is Paseo's notice `Claude switched to a new session: <old> -> <new>`. The owner's original prompt, the owner's own `/clear` and the agent's reply stay. The awt plugin's `awt · handoff [auto]` rows and Paseo's `Worked for 0s` footer of the `/clear` turn are not pcic's and stay (V14). Interactive cards (`coldChoice` `ask`) keep their layout; their pcic-sent rows are hidden the same way.
-- **R52** (draft, owner 20-Nov-2026) The idle checkpoint job (R13..R19) is quiet in the chat too. It sends the checkpoint text with `messageId` `pcic-checkpoint-<jobId>` and `/compact` with `pcic-compact-<jobId>`, so the R51 transformers remove both rows. An `assistant_message` whose trimmed text is exactly `checkpoint saved` (any case, optional final period) is drawn as one grey row `pcic · checkpoint saved before the cache expired`. A `checkpoint failed: <reason>` reply stays as it is. The agent's `awt` tool-call rows, the awt plugin's row, Paseo's compaction marker and the `Worked for` footer are not pcic's and stay. R16 also counts a turn as pcic's own when its first `user_message` has a `pcic-` `messageId`.
-- **R53** (draft, owner 20-Nov-2026) The send mode is always `plugin`. Read from the 0.16.2 daemon: the plugin's `send()` and `paseo agent send` both reach `handleSendAgentMessageRequest`, which adds the `<paseo-system` envelope only when `sourceAgentId` is set, so the two paths send the same text and only the plugin path carries a `messageId`. The self-test (R22, R23) is removed: its 19-Nov-2026 verdict `cli` was a false positive and hid nothing (R51, R52). `sendMode` `cli` stays as a manual fallback, without hidden rows.
+- **R52** (owner, 20-Nov-2026) The idle checkpoint job (R13..R19) is quiet in the chat too. It sends the checkpoint text with `messageId` `pcic-checkpoint-<jobId>` and `/compact` with `pcic-compact-<jobId>`, so the R51 transformers remove both rows. An `assistant_message` whose trimmed text is exactly `checkpoint saved` (any case, optional final period) is drawn as one grey row `pcic · checkpoint saved before the cache expired`. A `checkpoint failed: <reason>` reply stays as it is. The agent's `awt` tool-call rows, the awt plugin's row, Paseo's compaction marker and the `Worked for` footer are not pcic's and stay. The row is the same plugin kind as the card, with data `{note}`. R16 also counts a turn as pcic's own when its first `user_message` has a `pcic-` `messageId`.
+- **R53** (owner, 20-Nov-2026) The send mode is always `plugin`. Read from the 0.16.2 daemon: the plugin's `send()` and `paseo agent send` both reach `handleSendAgentMessageRequest`, which adds the `<paseo-system` envelope only when `sourceAgentId` is set, so the two paths send the same text and only the plugin path carries a `messageId`. The self-test (R22, R23) and the automatic switch to `cli` (R25) are removed: the 19-Nov-2026 verdict `cli` was a false positive and hid nothing (R51, R52). `sendMode` `auto` and `plugin` both mean `plugin`; `cli` stays as the owner's manual fallback, without hidden rows. pcic creates no agents.
 
 ## awt are needed. pcic uses `awt state/decide/note` (the checkpoint), `awt resume --hook --framed` (the PreCompact probe) and the existing `SessionStart` `compact` entry from `awt init --hooks claude`. The verb count stays 16.
 
@@ -275,7 +273,7 @@ Known interaction: after the `/compact` turn, the awt plugin's stand-in handoff 
 | Id | Decision |
 |---|---|
 | D1 | Separate repo `pcic` (option A; B and C rejected). Remote `tusharpandey13/pcic`, created and pushed by the orchestrator, not by the build |
-| D2 | A short-lived probe agent is acceptable: the self-test (R23) runs once per Paseo version, as specified |
+| D2 | (withdrawn by R53) No probe agent: the self-test is gone |
 | D3 | Defaults as specified: `minContextTokens` 100000, `idleSeconds` 3300 (55 min), `maxConcurrent` 2, `maxJobsPerHour` 30 |
 | D4 | A parent agent waiting on subagents is compacted anyway (R10 checks `backgroundWork`, not Paseo children) |
 | D5 | The cold-return guard offers three ways out: resend, `/compact`, or `/clear` plus the awt brief. For the brief after `/clear`, `pcic install` adds its own `SessionStart` hook, matcher `clear`, running `awt resume --hook --framed` only when `AWT_DIR` is set. awt is not changed. When awt itself provides a `clear` hook, pcic's is skipped (R28) |
@@ -331,16 +329,16 @@ Known interaction: after the `/compact` turn, the awt plugin's stand-in handoff 
 | R13 | T11, E3, E4, J2, J13 |
 | R14 | T11, E3, J2, J10 |
 | R15 | T12, E3, C9, C15 |
-| R16 | T13, E6, C8, J4 |
+| R16 | T13, T46, E6, C8, J4 |
 | R17 | T13, C8 |
 | R18 | T14, E3 |
 | R19 | T15, E3, C9, C11, J2 |
 | R20 | T16, E7, E17, J5 |
 | R21 | T17, E2, E14 |
-| R22 | T17, E2, J1, J9 |
-| R23 | T18, E2, C19 |
+| R22 | T17, T47 |
+| R23 | T47 |
 | R24 | T19, E13, C14 |
-| R25 | T20 |
+| R25 | T47 |
 | R26 | T21, C8, J4, J5 |
 | R27 | T22, C10, J12 |
 | R28 | T23, E1, J1 |
@@ -357,7 +355,7 @@ Known interaction: after the `/compact` turn, the awt plugin's stand-in handoff 
 | R39 | T32, C7 |
 | R40 | T33, E3, C13 |
 | R41 | T34, E1, J1 |
-| R42 | T35, T40, T41, E3 |
+| R42 | T35, T40, T41, T46, E3 |
 | R43 | T1, C16 |
 | R44 | T37, E20 |
 | R45 | T38, E20 |
@@ -367,3 +365,5 @@ Known interaction: after the `/compact` turn, the awt plugin's stand-in handoff 
 | R49 | T42, E20 |
 | R50 | T43, E20 |
 | R51 | T45, E20 |
+| R52 | T46 |
+| R53 | T47, E2 |

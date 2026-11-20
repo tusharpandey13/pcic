@@ -1,5 +1,6 @@
-// One job: checkpoint turn, then /compact (R13..R19, R25). Never retried, never resumed.
+// One job: checkpoint turn, then /compact (R13..R19). Both sends are quiet in the chat (R52). Never retried, never resumed.
 import { readTail } from "../server/transcript.mjs";
+import { msgId } from "../shared/cold-card.js";
 import { rows, type Handle, type Mode, type Outcome } from "./send.js";
 import type { Store } from "./store.js";
 import { CHECKPOINT_TEXT, type Config } from "./types.js";
@@ -8,7 +9,7 @@ import type { Agent, Job } from "./scheduler.js";
 type Ev = { event: string; reason?: string; tokens?: number | null; pre?: number | null; post?: number | null; mode?: string; ms?: number };
 export interface JobCtx {
   a: Agent; cfg: () => Config; store: Store; now: () => number;
-  sender: { mode(): Mode; checkpoint(id: string, text: string, s: number): Promise<Outcome>; compact(id: string, s: number): Promise<Outcome>; switchToCli(): void };
+  sender: { mode(): Mode; checkpoint(id: string, text: string, s: number, messageId?: string): Promise<Outcome>; compact(id: string, s: number, messageId?: string): Promise<Outcome> };
   check: (a: Agent) => Promise<string | null>;
   finish: (a: Agent, state: "done" | "skipped", result: string, ev: Ev) => void;
   handle: (id: string) => Handle;
@@ -32,7 +33,7 @@ export async function runJob(c: JobCtx): Promise<void> {
       if (why) return abort(why);
       if (job.foreign) return abort("user");
       job.sent++; job.lastSendAt = now();
-      const out = await sender.checkpoint(a.id, CHECKPOINT_TEXT, cfg.checkpointTimeoutSeconds);
+      const out = await sender.checkpoint(a.id, CHECKPOINT_TEXT, cfg.checkpointTimeoutSeconds, msgId("checkpoint", job.id));
       if (job.foreign) return abort("user");
       if (out.kind !== "completed" || job.ownOutcome) { const code = job.ownOutcome?.code ?? failCode(out, job); return done(`checkpoint_failed:${code}`, { event: "checkpoint_failed", reason: code }); }
       store.hist({ agent: a.id, event: "checkpoint_ok", ms: now() - t0 });
@@ -47,7 +48,7 @@ export async function runJob(c: JobCtx): Promise<void> {
     if (now() >= a.deadline) return abort("late"); // R17
     try { store.writePending(a.id, job.id); store.writeJob(a.id, { jobId: job.id, anchor, phase: "compact", startedAt: t0 }); } catch { return abort("state"); }
     job.sent++; job.lastSendAt = now();
-    const out = await sender.compact(a.id, cfg.compactTimeoutSeconds);
+    const out = await sender.compact(a.id, cfg.compactTimeoutSeconds, msgId("compact", job.id));
     if (job.foreign) return abort("user");
     if (out.kind !== "completed" || job.ownOutcome) { const code = job.ownOutcome?.code ?? failCode(out, job); return done(`compact_failed:${code}`, { event: "compact_failed", reason: code, mode: sender.mode() }); }
     const mode = sender.mode();
@@ -55,13 +56,8 @@ export async function runJob(c: JobCtx): Promise<void> {
     try { page = await c.handle(a.id).timeline.refetch({ direction: "tail", limit: 50 }); } catch {}
     const rs = rows(page);
     let from = -1;
-    rs.forEach((r, i) => { if (r.type === "user_message" && (r.text === "/compact" || r.text.includes("<paseo-system"))) from = i; });
+    rs.forEach((r, i) => { if (r.type === "user_message" && r.text === "/compact") from = i; });
     const after = from >= 0 ? rs.slice(from + 1) : [];
-    // R25: an envelope, or a model reply to /compact, means the send was not plain.
-    if (mode === "plugin" && from >= 0 && (rs[from].text.includes("<paseo-system") || after.some((r) => r.type === "assistant_message" && r.text.trim()))) {
-      sender.switchToCli();
-      return done("compact_failed:not_plain", { event: "compact_failed", reason: "not_plain", mode });
-    }
     // R19: a compact_boundary newer than the job start, or a completed compaction item.
     let b: { at: number; pre: number | null; post: number | null } | null = null;
     const rec = store.session(a.id);

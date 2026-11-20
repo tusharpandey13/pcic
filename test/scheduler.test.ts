@@ -41,7 +41,7 @@ test("T11 no awtDir, or checkpoint:off: the first send is /compact", async () =>
 });
 
 // ---- T3 (R1, R36) ----------------------------------------------------------------------------------
-test("T3 only claude agents get PCIC_HOME and a state; opted-out and probe agents get PCIC_OFF", async () => {
+test("T3 only claude agents get PCIC_HOME and a state; opted-out agents get PCIC_OFF", async () => {
   const r = rig();
   for (const provider of ["claude", "pi", "opencode", "codex"]) {
     const res = await r.call("agent.open.before", { request: { agentId: `a_${provider}`, provider, cwd: "/tmp/parsekit", labels: {}, env: { KEEP: "1" } } });
@@ -50,7 +50,6 @@ test("T3 only claude agents get PCIC_HOME and a state; opted-out and probe agent
     assert.equal(r.pcic.state(`a_${provider}`)?.state === "idle_wait", provider === "claude", provider);
   }
   const off = await r.call("agent.open.before", { request: { agentId: "x", provider: "claude", cwd: "/tmp/parsekit", labels: { pcic: "off" }, env: {} } }); assert.equal(off.env.PCIC_OFF, "1");
-  const probe = await r.call("agent.open.before", { request: { agentId: "p", provider: "claude", cwd: "/tmp/parsekit", labels: { pcic: "probe" }, env: {} } }); assert.equal(probe.env.PCIC_OFF, "1");
   await r.pcic.start(r.paseo); await r.sweep(); r.clock.set(T0 + 99 * 3600e3); await r.sweep(); await r.run(); assert.deepEqual(r.paseo.sent, []); r.cleanup();
 });
 
@@ -154,7 +153,7 @@ test("T8 a flip between the checkpoint and /compact aborts before /compact (R17)
 // ---- T9 (R11), C8b ---------------------------------------------------------------------------------
 test("T9/C8b two plugin instances on one PCIC_HOME: one job, the other gives claimed", async () => {
   const r = rig(); await idleAgent(r, "a");
-  const second = createPcic({ env: { ...r.t.env, PASEO_VERSION: "0.16.1" }, now: r.clock.now, timer: r.clock.timer, log: () => {}, version: async () => "0.16.1" });
+  const second = createPcic({ env: r.t.env, now: r.clock.now, timer: r.clock.timer, log: () => {} });
   await second.start(r.paseo); r.paseo.hold = true; r.clock.set(T0 + DUE + 1000);
   await Promise.all([r.pcic.sweep(), second.sweep()]); await settle(); r.paseo.release(); await settle(); await r.pcic.idle(); await second.idle(); await settle();
   assert.equal(texts(r).filter((x) => x === CHECKPOINT_TEXT).length, 1); assert.ok(events(r).includes("skipped:claimed")); assert.equal(readdirSafe(join(r.t.home, "claims")).length, 1); second.cleanup(); r.cleanup();
@@ -277,14 +276,14 @@ test("T31/C1/C2 a jobs file found at start is logged interrupted and removed; it
   for (const phase of ["checkpoint", "compact"]) {
     const r = rig(); await idleAgent(r, "a"); mkdirSync(join(r.t.home, "jobs"), { recursive: true }); mkdirSync(join(r.t.home, "claims"), { recursive: true });
     writeFileSync(join(r.t.home, "jobs", "a.json"), JSON.stringify({ jobId: "j", anchor: T0, phase, startedAt: T0 })); writeFileSync(join(r.t.home, "claims", `a.${T0}`), "");
-    const r2 = createPcic({ env: { ...r.t.env, PASEO_VERSION: "0.16.1" }, now: r.clock.now, timer: r.clock.timer, log: () => {}, version: async () => "0.16.1" }); await r2.start(r.paseo);
+    const r2 = createPcic({ env: r.t.env, now: r.clock.now, timer: r.clock.timer, log: () => {} }); await r2.start(r.paseo);
     assert.ok(events(r).includes("interrupted")); assert.ok(!existsSync(join(r.t.home, "jobs", "a.json"))); assert.ok(existsSync(join(r.t.home, "claims", `a.${T0}`)));
     r.clock.set(T0 + DUE + 1000); await r2.sweep(); await settle(); await r2.idle(); assert.deepEqual(r.paseo.sent, []); assert.ok(events(r).includes("skipped:claimed")); r2.cleanup(); r.cleanup();
   }
 });
 test("C7 a reload during idle_wait rebuilds and fires at the original due", async () => {
   const r = rig(); await idleAgent(r, "a"); r.pcic.cleanup();
-  const r2 = createPcic({ env: { ...r.t.env, PASEO_VERSION: "0.16.1" }, now: r.clock.now, timer: r.clock.timer, log: () => {}, version: async () => "0.16.1" }); await r2.start(r.paseo);
+  const r2 = createPcic({ env: r.t.env, now: r.clock.now, timer: r.clock.timer, log: () => {} }); await r2.start(r.paseo);
   assert.equal(r2.state("a")!.due, T0 + DUE); r.clock.set(T0 + DUE + 1000); await r2.sweep(); await settle(); await r2.idle(); assert.equal(texts(r).length, 2); r2.cleanup(); r.cleanup();
 });
 
@@ -298,7 +297,7 @@ test("T32 after cleanup: no sweep, no history write, children killed", async () 
 test("T35 pcic sends only the R42 texts and never answers a permission request", async () => {
   const r = rig(); await idleAgent(r, "a"); await idleAgent(r, "b", {}, { awtDir: null }); await goDue(r); r.clock.set(r.clock.now() + 20_000); await r.sweep(); await r.run();
   for (const t of texts(r)) assert.ok(t === CHECKPOINT_TEXT || t === "/compact", t);
-  const src = ["scheduler", "job", "send"].map((f) => readFileSync(join(import.meta.dirname, "..", "server", `${f}.ts`), "utf8")).join("\n"); assert.ok(!/respondToPermission/.test(src)); assert.ok(!/sourceAgentId/.test(src.replace(/never passes sourceAgentId/g, ""))); assert.deepEqual(r.paseo.created, []); r.cleanup();
+  const src = ["scheduler", "job", "send"].map((f) => readFileSync(join(import.meta.dirname, "..", "server", `${f}.ts`), "utf8")).join("\n"); assert.ok(!/respondToPermission/.test(src)); assert.ok(!/sourceAgentId/.test(src.replace(/never passes sourceAgentId/g, ""))); assert.ok(!/agents\.create|\.create\(/.test(src), "pcic creates no agents (R53)"); r.cleanup();
 });
 void asst;
 

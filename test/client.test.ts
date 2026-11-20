@@ -1,7 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { cardLine } from "../server/card.mjs";
-import { COLD_MARK, TEXT_TYPES, cardDataSchema, findCard, itemText, parseCardLine, transformText, transformItem, autoNote, msgId, transformerId, PASEO_ID, CARD_KIND, viewModel, resultText, pendingText, fmtUsd } from "../shared/cold-card.js";
+import { COLD_MARK, TEXT_TYPES, cardDataSchema, rowDataSchema, findCard, itemText, parseCardLine, transformText, transformItem, autoNote, msgId, transformerId, PASEO_ID, CARD_KIND, viewModel, resultText, pendingText, fmtUsd } from "../shared/cold-card.js";
 
 const card = { cardId: "0123456789abcdef", idleMs: 48_840_000, tokens: 132_000, awt: true, auto: false, est: { resume: 0.33, compact: 0.2, checkpoint: 0.0123 } };
 const line = cardLine(card);
@@ -83,6 +83,17 @@ test("T45 R51 the recorded awake timeline: only the owner's prompt, one pcic row
   assert.equal(transformItem({ type: "user_message", text: "/clear" }), undefined);
   assert.equal(transformItem({ type: "assistant_message", text: "Claude switched to a new session, as you asked" }), undefined);
   assert.deepEqual(msgId("compact", id), "pcic-compact-0123456789abcdef");
+});
+// T46 (R52)
+test("T46 R52 the checkpoint reply becomes one grey pcic row; the pcic- user_messages go; a failure and other replies stay", () => {
+  const note = { items: [{ type: "plugin", kind: CARD_KIND, version: 1, data: { note: "pcic · checkpoint saved before the cache expired" } }] };
+  for (const t of ["checkpoint saved", "checkpoint saved.", "  Checkpoint saved.\n", "CHECKPOINT SAVED"]) assert.deepEqual(transformItem({ type: "assistant_message", text: t }), note, t);
+  assert.ok(rowDataSchema.safeParse(note.items[0].data).success); assert.ok(PASEO_ID.test(CARD_KIND));
+  for (const t of ["checkpoint failed: awt missing", "checkpoint saved, next up the parser", "I have a checkpoint saved somewhere"]) assert.equal(transformItem({ type: "assistant_message", text: t }), undefined, t);
+  assert.deepEqual(transformItem({ type: "user_message", text: "[pcic checkpoint] ...", messageId: msgId("checkpoint", "j1") }), { items: [] });
+  assert.deepEqual(transformItem({ type: "user_message", text: "/compact", messageId: msgId("compact", "j1") }), { items: [] });
+  assert.equal(msgId("checkpoint", "j1"), "pcic-checkpoint-j1");
+  assert.equal(transformItem({ type: "user_message", text: "checkpoint saved" }), undefined, "the owner's own text stays");
 });
 test("T39 row texts: pending, sent, failed, busy (retryable), expired", () => {
   assert.equal(pendingText("compact", true), "Compacting, then sending"); assert.equal(pendingText("checkpoint", true), "Cleared, sending with the awt brief"); assert.equal(pendingText("resume", false), "Sending with full context");

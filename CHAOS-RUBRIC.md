@@ -32,7 +32,7 @@ Universal safe behaviour (checked in every case):
 | C16 | T | R43 | `config.json` rewritten with garbage mid-run, then fixed | Defaults and a warning, then the fixed values at the next sweep; no crash; no job decided on a garbage value | S5; values in history `scheduled` lines follow the expected sequence |
 | C17 | T | R32 | Hook storm: 20 cold prompts to one session in parallel, and 20 sessions at once | Each session is blocked at most once (marker by rename; a lost race gives a pass, never a second block) | Blocks per session ≤ 1 |
 | C18 | T, E | R5, R37 | `lastUsage` reads zero or NaN after a daemon restart, and the session record is missing | `unknown_context`, no job; the guard still works from the transcript | No send; history `skipped unknown_context` |
-| C19 | T | R23 | Self-test: the probe agent cannot be created; create succeeds but archive throws; the daemon restarts mid-probe | No verdict, plugin mode, up to 3 tries per version; a leftover probe agent (label `pcic=probe`) is archived at the next start | Probe agents archived; tries ≤ 3 |
+| C19 | T | R23 | (retired with R53: pcic creates no probe agent) | none | none |
 
 ## Pass rule
 

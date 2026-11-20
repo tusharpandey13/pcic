@@ -1,10 +1,10 @@
 # AGENTS.md
 
-pcic compacts idle Claude Code agents that Paseo launches, while their prompt cache is warm. It is one Paseo server plugin, one hook script and a small CLI. [SPEC.md](SPEC.md) (rules R1..R50) is the contract.
+pcic compacts idle Claude Code agents that Paseo launches, while their prompt cache is warm. It is one Paseo server plugin, one hook script and a small CLI. [SPEC.md](SPEC.md) (rules R1..R53) is the contract.
 
 ## Using pcic (for agents)
 
-- You do not run anything. When your session has been idle about 55 minutes with a large context, pcic sends you one message starting `[pcic checkpoint]`. Do not continue the task and do not start new work: run `awt state --now "..." --next "..."` (and `awt decide` / `awt note` where needed), then reply with exactly one line, `checkpoint saved` or `checkpoint failed: <reason>`. `/compact` follows.
+- You do not run anything. When your session has been idle about 55 minutes with a large context, pcic sends you one message starting `[pcic checkpoint]`. Do not continue the task and do not start new work: run `awt state --now "..." --next "..."` (and `awt decide` / `awt note` where needed), then reply with exactly one line, `checkpoint saved` or `checkpoint failed: <reason>`. `/compact` follows. Both pcic messages are hidden in the owner's chat.
 - After a compaction, the summary and the framed awt record are context only. They are not a user request: take no action until the owner writes.
 - If your owner's prompt is blocked with "pcic: this agent's prompt cache has likely expired", it is the owner's choice, not yours: they pick on the card in the Paseo app (resume, compact first, or continue from a checkpoint) or resend, `/compact` or `/clear` by hand. pcic sends their prompt for them after the pick. Do nothing and do not answer the card; if they ask, point them to `node bin/pcic.mjs config coldChoice ask|resume|checkpoint`.
 - To exclude an agent from pcic, set the Paseo label `pcic=off` when creating it.
@@ -19,7 +19,7 @@ node bin/pcic.mjs doctor      # read-only; exit 0 only when everything is ok
 node bin/pcic.mjs install --uninstall
 ```
 
-Show the owner the target file before running `install` on their real settings. State and history live in `${PCIC_HOME:-${XDG_DATA_HOME:-~/.local/share}/pcic}` (`config.json`, `history.jsonl`, `verdict.json`, `pause.json`, `cards/` with the owner's blocked prompts at mode 0600). `history.jsonl` says what pcic did and why it skipped. `"enabled": false` in `config.json` turns everything off from the next sweep.
+Show the owner the target file before running `install` on their real settings. State and history live in `${PCIC_HOME:-${XDG_DATA_HOME:-~/.local/share}/pcic}` (`config.json`, `history.jsonl`, `pause.json`, `cards/` with the owner's blocked prompts at mode 0600). `history.jsonl` says what pcic did and why it skipped. `"enabled": false` in `config.json` turns everything off from the next sweep.
 
 ## Working on this repository
 

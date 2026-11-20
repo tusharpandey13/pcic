@@ -204,12 +204,11 @@ test("E1 install, doctor, and the Stop hook fires with PASEO_AGENT_ID (V4)", { s
   for (const k of ["sessionId", "transcriptPath", "cwd", "awtDir", "lastAssistantAt", "lastAssistantUuid", "contextTokens", "model", "ttlObserved", "writtenAt"]) assert.ok(k in s, `record lacks ${k}`);
   assert.ok(existsSync(s.transcriptPath)); assert.ok(s.contextTokens > 0); logLine(`E1 PASS base context ${s.contextTokens}`);
 });
-test("E2 the self-test records a plugin verdict, archives its probe, the probe send is plain (V1)", { skip: !(ON && PAID) || REAL_AUTH }, async () => {
-  const v = await waitFor("verdict.json", () => readJ(join(pcic, "verdict.json")), 150_000);
-  assert.equal(v.mode, "plugin");
-  const probes = (j((await pas("agent", "ls", "-a", "--json")).out) ?? []).filter((a: any) => a.name === "pcic probe"); assert.ok(probes.length >= 1, "no probe agent");
-  for (const p of probes) { assert.equal((await inspect(p.id)).Archived, true, "probe not archived"); const tl = await timeline(p.id); assert.equal(tl[0]?.text, "/compact"); assert.ok(!tl.some((x) => x.text.includes("<paseo-system")), "probe send is enveloped"); assert.equal((await inspect(p.id)).LastUsage?.CostUsd ?? 0, 0); }
-  logLine(`E2 PASS verdict=${JSON.stringify(v)}`);
+test("E2 no self-test: no probe agent and no verdict.json after the start (R53)", { skip: !(ON && PAID) || REAL_AUTH }, async () => {
+  await new Promise((r) => setTimeout(r, 90_000));
+  assert.ok(!existsSync(join(pcic, "verdict.json")), "verdict.json written");
+  const probes = (j((await pas("agent", "ls", "-a", "--json")).out) ?? []).filter((a: any) => a.name === "pcic probe"); assert.equal(probes.length, 0, "a probe agent exists");
+  logLine("E2 PASS no probe, no verdict");
 });
 
 // ---- phase 1: E3/E14 E4 E5 E6 E7 E11 E15 E16 (concurrent) -----------------------------------------

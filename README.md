@@ -35,7 +35,7 @@ The 2,000 output tokens for the summary and the 15K compacted size are the same 
 3. **Compact.** pcic checks the agent is still idle and sends `/compact`. Its `PreCompact` hook tells the summary what to keep. awt's `SessionStart` hook puts the task brief back right after the compaction.
 4. **Return.** Your next message goes to a small context: the summary plus the awt brief.
 
-pcic acts at most once per idle period, only when the agent is idle, only when the context is at least 100K tokens, and never after the job's deadline (3 minutes before the cache expires). It never retries a job and never answers a permission request. Everything it sends is visible in the chat.
+pcic acts at most once per idle period, only when the agent is idle, only when the context is at least 100K tokens, and never after the job's deadline (3 minutes before the cache expires). It never retries a job and never answers a permission request. The idle checkpoint prompt and `/compact` are hidden in the chat; the agent's `checkpoint saved` reply shows as one grey row, `pcic · checkpoint saved before the cache expired`. History (`history.jsonl`) lists everything it did.
 
 ### The cold-return guard and the card
 
@@ -114,7 +114,7 @@ node bin/pcic.mjs doctor
 
 `pcic install` merges four entries (`UserPromptSubmit`, `Stop`, `PreCompact`, and `SessionStart` with matcher `clear`) into `${CLAUDE_CONFIG_DIR:-~/.claude}/settings.json`. Each command ends with `# pcic:hook`. When a `SessionStart` `clear` hook that runs `awt resume` is already there (newer awt installs its own), pcic adds no `clear` entry, so the brief is not injected twice. It is idempotent, keeps a timestamped backup (`settings.json.pcic-bak-*`, the last five) whenever it changes the file, follows a symlink, leaves every other hook alone, and refuses a file that is not valid JSON.
 
-On first start the plugin runs a one-time self-test per Paseo version: it creates a short-lived probe agent in `$PCIC_HOME/probe/` (label `pcic=probe`), sends it `/compact`, checks the text arrived plain, and archives it. The result is kept in `verdict.json`.
+pcic sends through the plugin handle (plain text, with a `messageId`). `sendMode` `cli` is a manual fallback; pcic never switches to it by itself.
 
 ## Configure
 
@@ -140,11 +140,10 @@ State lives in `PCIC_HOME`, default `${XDG_DATA_HOME:-~/.local/share}/pcic`. Set
 | `compactTimeoutSeconds` | `300` | Wait for the compaction |
 | `pauseMinutes` | `60` | Pause after a rate-limit, usage-limit or auth error |
 | `sweepSeconds` | `30` | Sweeper period |
-| `sendMode` | `"auto"` | `"auto"` (the self-test decides), `"plugin"` or `"cli"` |
+| `sendMode` | `"auto"` | `"auto"` or `"plugin"` (both send through the plugin), or `"cli"` (manual fallback) |
 | `paseoBin` | `"paseo"` | CLI used by the fallback send mode |
 | `coldChoice` | `"ask"` | `"ask"` (the card), `"resume"` (no block) or `"checkpoint"` (`/clear` and your prompt, automatically) |
 | `freshContextTokens` | `20000` | Tokens a fresh session starts with; used only for the card's checkpoint estimate |
-| `probeModel` | `"haiku"` | Model for the self-test agent (the cheapest Claude model); empty means Paseo's default Claude model |
 | `prices` | `null` | Your own $/M prices, keyed by a substring of the model id: `{"input", "write5m", "write1h", "read", "output"}`. Used only for the guard's estimate |
 
 To exclude one agent, give it the Paseo label `pcic=off`. To turn pcic off everywhere, set `"enabled": false`.
@@ -157,7 +156,7 @@ To exclude one agent, give it the Paseo label `pcic=off`. To turn pcic off every
 node bin/pcic.mjs doctor
 ```
 
-Read-only. It checks that the four pcic hooks are installed (three when awt provides the `clear` brief), that awt's `SessionStart` `compact` hook is present, that `AWT_COMPACT_BRIEF=1` is not set (the brief would arrive twice), that `verdict.json`, `pause.json` and `config.json` are valid, and that `PCIC_HOME` is writable. Each problem prints a `fix:` line. Exit 0 when everything is ok, 1 otherwise.
+Read-only. It checks that the four pcic hooks are installed (three when awt provides the `clear` brief), that awt's `SessionStart` `compact` hook is present, that `AWT_COMPACT_BRIEF=1` is not set (the brief would arrive twice), that `pause.json` and `config.json` are valid, and that `PCIC_HOME` is writable. Each problem prints a `fix:` line. Exit 0 when everything is ok, 1 otherwise.
 
 ## Uninstall
 

@@ -13,7 +13,7 @@ test("T1 no config file: defaults, no warning", () => {
   assert.deepEqual(w, []); t.cleanup();
 });
 test("T1 every key invalid in turn: default and one warning naming the key", () => {
-  const bad: Record<string, unknown> = { enabled: "yes", ttlSeconds: -1, idleSeconds: 0.5, lateGraceSeconds: "x", minContextTokens: NaN, guard: 1, checkpoint: "maybe", precompact: null, precompactExtra: 5, includeSubagents: "no", exclude: [1], maxConcurrent: 0, staggerSeconds: -3, maxJobsPerHour: "many", checkpointTimeoutSeconds: 0, compactTimeoutSeconds: 0, pauseMinutes: 0, sweepSeconds: 0, sendMode: "smoke", paseoBin: "", probeModel: 3, coldChoice: "always", freshContextTokens: -1, prices: [] };
+  const bad: Record<string, unknown> = { enabled: "yes", ttlSeconds: -1, idleSeconds: 0.5, lateGraceSeconds: "x", minContextTokens: NaN, guard: 1, checkpoint: "maybe", precompact: null, precompactExtra: 5, includeSubagents: "no", exclude: [1], maxConcurrent: 0, staggerSeconds: -3, maxJobsPerHour: "many", checkpointTimeoutSeconds: 0, compactTimeoutSeconds: 0, pauseMinutes: 0, sweepSeconds: 0, sendMode: "smoke", paseoBin: "", coldChoice: "always", freshContextTokens: -1, prices: [] };
   for (const [k, v] of Object.entries(bad)) {
     const t = tmp(); writeConfig(t, JSON.stringify({ [k]: v }).replace("null", "null")); const w: string[] = [];
     const c = loadConfig(t.env, (m: string) => w.push(m)); const d = loadConfig(tmp().env);
@@ -38,9 +38,6 @@ test("R5 num accepts only finite non-negative numbers", () => {
   assert.equal(num(0), 0); assert.equal(num(12), 12);
 });
 void settle;
-test("T1 probeModel defaults to haiku, the cheapest Claude model (R23)", () => {
-  const t = tmp(); assert.equal(loadConfig(t.env).probeModel, "haiku"); t.cleanup();
-});
 
 // T43 (R50)
 test("T43 config coldChoice sets the key, keeps the other keys, and the hook obeys it", async () => {

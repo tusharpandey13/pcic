@@ -12,11 +12,11 @@ Owner installs the plugin, runs `pcic install` and `pcic doctor`, and goes on wo
 |---|---|
 | 1 | `pcic install` prints what it added (three entries) and the backup path; a second run says nothing changed |
 | 2 | `pcic doctor` exits 0, or names exactly what is missing (for example awt's compact hook) with a fix line |
-| 3 | Within about 2 minutes of the plugin starting, `verdict.json` exists (`plugin` expected), and the probe agent is already archived. The owner sees at most one short-lived probe agent |
+| 3 | After the plugin starts, no probe agent appears and no `verdict.json` is written |
 | 4 | Agents that existed before the install are tracked from the plugin start (R37), with no reopen needed. Their guard works at their next prompt (the hook defaults `PCIC_HOME`) |
 | 5 | Nothing was sent to any existing agent at install time |
 
-Rules: R22, R28, R37, R41.
+Rules: R28, R37, R41, R53.
 
 ### J2 Owner leaves for lunch
 
@@ -115,9 +115,9 @@ The daemon is upgraded with 10 idle agents: some within due, some past their dea
 |---|---|
 | 1 | After the restart, agents within due fire at their original times; agents past their deadline are skipped |
 | 2 | No agent with a stale anchor gets a send |
-| 3 | A new Paseo version means the self-test runs once and a new verdict is recorded |
+| 3 | A new Paseo version needs no new check: the send mode stays plugin |
 
-Rules: R22, R37.
+Rules: R37, R53.
 
 ### J11 Owner turns pcic off
 

@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.2.3 (20-Nov-2026)
+
+- The idle checkpoint is quiet in the chat (R52): the checkpoint prompt and `/compact` carry a `pcic-` message id and the client hides them, and the agent's `checkpoint saved` reply is drawn as one grey row, `pcic · checkpoint saved before the cache expired`. A `checkpoint failed: ...` reply stays visible. A turn whose first user message has a `pcic-` id also counts as pcic's own (R16).
+- The send mode is always `plugin` (R53). Removed: the startup self-test and its probe agent, `verdict.json`, the automatic switch to `cli` (a false positive on 19 Nov made 0.2.2 send in cli mode, which carries no message id and hid nothing), and the config key `probeModel` (an old `config.json` with it gets one "unknown config key" warning). `sendMode` `auto` and `plugin` both mean plugin; `cli` stays as a manual fallback. A leftover `verdict.json` is ignored.
+
 ## 0.2.2 (20-Nov-2026)
 
 - A checkpoint under `coldChoice checkpoint` is now quiet: the chat keeps your message, one grey row `pcic · continued from checkpoint · saved about $X (...)`, and the reply. The `/clear` and the resent copy of your message that pcic sends are hidden (pcic tags them with a `pcic-` message id), and so is Paseo's "Claude switched to a new session" line.

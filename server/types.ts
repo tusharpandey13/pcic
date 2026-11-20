@@ -2,7 +2,7 @@ export interface Config {
   enabled: boolean; ttlSeconds: number; idleSeconds: number; lateGraceSeconds: number; minContextTokens: number; guard: boolean;
   checkpoint: "awt" | "off"; precompact: boolean; precompactExtra: string; includeSubagents: boolean; exclude: string[];
   maxConcurrent: number; staggerSeconds: number; maxJobsPerHour: number; checkpointTimeoutSeconds: number; compactTimeoutSeconds: number;
-  pauseMinutes: number; sweepSeconds: number; sendMode: "auto" | "plugin" | "cli"; paseoBin: string; probeModel: string;
+  pauseMinutes: number; sweepSeconds: number; sendMode: "auto" | "plugin" | "cli"; paseoBin: string;
   coldChoice: "ask" | "resume" | "checkpoint"; freshContextTokens: number;
   prices: Record<string, unknown> | null;
 }

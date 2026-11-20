@@ -2,10 +2,16 @@
 import { useState } from "react";
 import { Pressable, Text, View } from "react-native";
 import { useRpc, type PluginTimelineItemProps } from "@getpaseo/plugin/client";
-import { chooseRpc, pendingText, resultText, viewModel, type CardData } from "../shared/cold-card";
+import { chooseRpc, pendingText, resultText, viewModel, type CardData, type NoteData } from "../shared/cold-card";
 
-export function ColdCard({ item, theme }: PluginTimelineItemProps<CardData>) {
+/** R52: one small grey row (same renderer as the card, a data variant). */
+export function ColdCard({ item, theme }: PluginTimelineItemProps<CardData | NoteData>) {
   const data = item.data;
+  if ("note" in data) return <View style={{ paddingVertical: 4, paddingHorizontal: 12 }}><Text style={{ color: theme.colors.foregroundMuted, fontSize: 13 }}>{data.note}</Text></View>;
+  return <Card data={data} theme={theme} />;
+}
+
+function Card({ data, theme }: { data: CardData; theme: PluginTimelineItemProps<CardData>["theme"] }) {
   const choose = useRpc(chooseRpc);
   const view = viewModel(data);
   const [picked, setPicked] = useState<string>(view.options[0]?.id ?? "");

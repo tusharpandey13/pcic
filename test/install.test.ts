@@ -54,7 +54,7 @@ test("T34 doctor: everything ok exits 0 and changes nothing", async () => {
 test("T34 doctor names each failing check and exits 1", async () => {
   const t = tmp(); let r = await cli(["doctor"], t.env); assert.equal(r.code, 1); assert.match(r.stdout, /pcic hook entries missing: UserPromptSubmit, Stop, PreCompact, SessionStart/); assert.match(r.stdout, /fix: pcic install/); assert.match(r.stdout, /awt's SessionStart compact hook is not installed/);
   await okEnv(t); r = await cli(["doctor"], { ...t.env, AWT_COMPACT_BRIEF: "1" }); assert.equal(r.code, 1); assert.match(r.stdout, /AWT_COMPACT_BRIEF=1/);
-  mkdirSync(t.home, { recursive: true }); writeFileSync(join(t.home, "verdict.json"), "{bad"); r = await cli(["doctor"], t.env); assert.match(r.stdout, /verdict\.json is invalid/); writeFileSync(join(t.home, "verdict.json"), JSON.stringify({ paseoVersion: "0.16.1", mode: "plugin" }));
+  mkdirSync(t.home, { recursive: true });
   writeFileSync(join(t.home, "pause.json"), "[]"); r = await cli(["doctor"], t.env); assert.match(r.stdout, /pause\.json is invalid/); writeFileSync(join(t.home, "pause.json"), JSON.stringify({ until: 5 }));
   writeConfig(t, { guard: "x" }); r = await cli(["doctor"], t.env); assert.match(r.stdout, /config: invalid config value for guard/); writeConfig(t, {});
   chmodSync(t.home, 0o500); r = await cli(["doctor"], t.env); assert.match(r.stdout, /not writable/); chmodSync(t.home, 0o700);
