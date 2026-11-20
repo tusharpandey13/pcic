@@ -114,6 +114,11 @@ test("T41 an auto card for a busy agent waits and is acted on at the next scan; 
   await r.pcic.autoScan(); assert.deepEqual(sentTexts(r), []); assert.ok(!existsSync(cardPath(r.t.home, "cccccccccccccccc")));
   assert.ok(historyOf(r.t).some((e) => e.reason === "auto_stale")); r.cleanup();
 });
+test("T45 R51 every text pcic sends for a card carries a pcic- messageId, so the client can hide it", async () => {
+  const r = await setup(); mkCard(r, { auto: true }); await r.sweep(); await settle();
+  assert.deepEqual(r.paseo.sent.map((s) => [s.text, s.opts?.messageId]), [["/clear", `pcic-clear-${CARD}`], [PROMPT, `pcic-prompt-${CARD}`]]);
+  assert.ok(r.paseo.sent.every((s) => s.opts?.activeTurnBehavior === "steer")); r.cleanup();
+});
 test("T41 the sweep scans too (the fallback), and not while disabled", async () => {
   const r = await setup(); mkCard(r, { auto: true }); await r.sweep(); await settle(); assert.deepEqual(sentTexts(r), ["/clear", PROMPT]); r.cleanup();
   const r2 = await setup({ cfg: { enabled: false } }); mkCard(r2, { auto: true }); await r2.sweep(); assert.deepEqual(sentTexts(r2), []); r2.cleanup();

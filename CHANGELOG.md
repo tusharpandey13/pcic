@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.2.2 (20-Nov-2026)
+
+- A checkpoint under `coldChoice checkpoint` is now quiet: the chat keeps your message, one grey row `pcic · continued from checkpoint · saved about $X (...)`, and the reply. The `/clear` and the resent copy of your message that pcic sends are hidden (pcic tags them with a `pcic-` message id), and so is Paseo's "Claude switched to a new session" line.
+- `coldChoice checkpoint` on an agent with no awt record now lets the message through with full context instead of clearing it with nothing to continue from (`guard_pass_setting`, choice `resume_no_awt`).
+
 ## 0.2.1 (20-Nov-2026)
 
 - Fix: the cold-return card never appeared in the app. Paseo only accepts plugin ids and kinds made of lowercase letters, digits and dashes, and it dropped pcic's whole client entry because the transformer ids (`pcic.cold-card.user_message`) and the renderer kind (`pcic.coldCard`) broke that rule. They are now `pcic-cold-card-<item-type>` and `pcic-cold-card`, and a test checks them against Paseo's rule.

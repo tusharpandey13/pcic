@@ -76,27 +76,27 @@ export function makeSender(d: SenderDeps) {
     switchToCli: () => { forced = "cli"; d.store.setVerdict({ paseoVersion: version, mode: "cli", at: d.now(), tries: 0 }); },
     killChildren: () => { for (const c of children) c.kill("SIGKILL"); children.clear(); },
     /** One turn with a fixed text (the checkpoint, or `/clear` for the card): plugin mode uses run(); cli mode sends then waits. */
-    async turn(id: string, text: string, timeoutS: number): Promise<Outcome> {
+    async turn(id: string, text: string, timeoutS: number, messageId?: string): Promise<Outcome> {
       const p = d.paseo(); if (!p) return { kind: "send_failed" };
       const h = p.agents.ref(id);
       try {
-        if (mode() === "plugin") return await race(h.run(text, opts).then(fromRun), timeoutS * 1000);
+        if (mode() === "plugin") return await race(h.run(text, messageId ? { ...opts, messageId } : opts).then(fromRun), timeoutS * 1000);
         await cliSend(id, text);
         return await race(h.waitForFinish(timeoutS * 1000).then(fromRun), timeoutS * 1000);
       } catch { return { kind: "send_failed" }; }
     },
     checkpoint(id: string, text: string, timeoutS: number): Promise<Outcome> { return this.turn(id, text, timeoutS); },
     /** Sends one text and does not wait for the turn (the owner's own prompt, R47). True when the send was accepted. */
-    async say(id: string, text: string): Promise<boolean> {
+    async say(id: string, text: string, messageId?: string): Promise<boolean> {
       const p = d.paseo(); if (!p) return false;
-      try { if (mode() === "plugin") await p.agents.ref(id).send(text, opts); else await cliSend(id, text); return true; } catch { return false; }
+      try { if (mode() === "plugin") await p.agents.ref(id).send(text, messageId ? { ...opts, messageId } : opts); else await cliSend(id, text); return true; } catch { return false; }
     },
     /** Exactly `/compact`, then wait for the turn to end. */
-    async compact(id: string, timeoutS: number): Promise<Outcome> {
+    async compact(id: string, timeoutS: number, messageId?: string): Promise<Outcome> {
       const p = d.paseo(); if (!p) return { kind: "send_failed" };
       const h = p.agents.ref(id);
       try {
-        if (mode() === "plugin") await h.send("/compact", opts); else await cliSend(id, "/compact");
+        if (mode() === "plugin") await h.send("/compact", messageId ? { ...opts, messageId } : opts); else await cliSend(id, "/compact");
         return await race(h.waitForFinish(timeoutS * 1000).then(fromRun), timeoutS * 1000);
       } catch { return { kind: "send_failed" }; }
     },

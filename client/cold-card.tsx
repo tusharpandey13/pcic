@@ -27,7 +27,7 @@ export function ColdCard({ item, theme }: PluginTimelineItemProps<CardData>) {
     }
   };
 
-  if (view.auto) return <View style={{ padding: 12, borderRadius: 8, borderWidth: 1, borderColor: c.border, backgroundColor: c.surface1 }}><Text style={{ color: c.foregroundMuted }}>{view.auto}</Text></View>;
+  if (view.auto) return <View style={{ paddingVertical: 4, paddingHorizontal: 12 }}><Text style={{ color: c.foregroundMuted, fontSize: 13 }}>{view.auto}</Text></View>;
   return (
     <View style={{ padding: 12, gap: 8, borderRadius: 8, borderWidth: 1, borderColor: c.border, backgroundColor: c.surface1 }}>
       <Text style={{ color: c.foreground, fontWeight: "600" }}>{view.header}</Text>

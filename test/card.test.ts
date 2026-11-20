@@ -68,10 +68,15 @@ test("T41 coldChoice resume still lets the first-block conditions decide: a warm
   const t = tmp(); writeConfig(t, { coldChoice: "resume" }); const r = await run(t, cold(t, { at: NOW - 5 * MIN }), "x"); assert.equal(r.code, 0); assert.deepEqual(historyOf(t), []); t.cleanup();
 });
 test("T41 coldChoice checkpoint: the guard blocks once and writes an auto card; the text says pcic continues", async () => {
-  const t = tmp(); writeConfig(t, { coldChoice: "checkpoint" }); const p = cold(t); const r = await run(t, p, "ZQX-PROMPT go");
+  const t = tmp({ AWT_DIR: tmp().dir, PATH: dirname(process.execPath) }); writeConfig(t, { coldChoice: "checkpoint" }); const p = cold(t); const r = await run(t, p, "ZQX-PROMPT go");
   assert.equal(r.code, 2); const c = readJsonFile(join(t.home, "cards", cardsOf(t)[0])); assert.equal(c.auto, true);
   assert.match(r.stderr, /pcic is continuing from a checkpoint/); assert.match(r.stderr, /auto=1\]\s*$/); assert.ok(r.stderr.trimEnd().length <= 600);
   assert.equal((await run(t, p, "ZQX-PROMPT go")).code, 0); assert.equal(cardsOf(t).length, 1); t.cleanup(); // the marker passes the resend
+});
+test("T45 R48 coldChoice checkpoint without an awt record: the guard passes as resume (resume_no_awt), no card", async () => {
+  const t = tmp(); writeConfig(t, { coldChoice: "checkpoint" }); const r = await run(t, cold(t), "ZQX-PROMPT go");
+  assert.equal(r.code, 0); assert.equal(cardsOf(t).length, 0);
+  assert.deepEqual(historyOf(t).map((h) => [h.event, h.choice]), [["guard_pass_setting", "resume_no_awt"]]); t.cleanup();
 });
 test("T41 the setting is validated: an unknown coldChoice means ask", async () => {
   const t = tmp(); writeConfig(t, { coldChoice: "always" }); const r = await run(t, cold(t), "x"); assert.equal(r.code, 2); assert.match(r.stderr, /Send the same message again/); t.cleanup();

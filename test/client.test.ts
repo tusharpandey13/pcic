@@ -1,7 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { cardLine } from "../server/card.mjs";
-import { COLD_MARK, TEXT_TYPES, cardDataSchema, findCard, itemText, parseCardLine, transformText, transformerId, PASEO_ID, CARD_KIND, viewModel, resultText, pendingText, fmtUsd } from "../shared/cold-card.js";
+import { COLD_MARK, TEXT_TYPES, cardDataSchema, findCard, itemText, parseCardLine, transformText, transformItem, autoNote, msgId, transformerId, PASEO_ID, CARD_KIND, viewModel, resultText, pendingText, fmtUsd } from "../shared/cold-card.js";
 
 const card = { cardId: "0123456789abcdef", idleMs: 48_840_000, tokens: 132_000, awt: true, auto: false, est: { resume: 0.33, compact: 0.2, checkpoint: 0.0123 } };
 const line = cardLine(card);
@@ -59,9 +59,30 @@ test("T39 without awt: Start fresh, no always-checkpoint; unknown prices leave t
   assert.deepEqual(v.options.map((o) => o.label), ["Resume full context", "Start fresh (new session: your message only)", "Compact, then send", "Resume full context (don't ask again)"]);
   assert.equal(fmtUsd(0.0004), " ~$0.0004"); assert.equal(fmtUsd(0.2), " ~$0.20"); assert.equal(fmtUsd(null), "");
 });
-test("T39 auto card: a non-interactive row with the setting and how to change it, no options", () => {
-  const v = viewModel(parseCardLine(cardLine({ ...card, auto: true }))!);
-  assert.equal(v.auto, "Cache expired 814 min ago. Continuing from checkpoint (your setting; change with: pcic config coldChoice ask)"); assert.deepEqual(v.options, []);
+test("T45 R51 auto card: one quiet row with the saving, no options", () => {
+  const v = viewModel(parseCardLine(cardLine({ ...card, auto: true, est: { resume: 0.53, compact: 0.31, checkpoint: 0.16 } }))!);
+  assert.equal(v.auto, "pcic · continued from checkpoint · saved about $0.37 (about $0.16 instead of $0.53 for the full context)"); assert.deepEqual(v.options, []);
+  const nul = parseCardLine(cardLine({ ...card, auto: true, est: { resume: null, compact: null, checkpoint: null } }))!;
+  assert.equal(autoNote(nul), "pcic · continued from checkpoint");
+});
+test("T45 R51 the recorded awake timeline: only the owner's prompt, one pcic row and the reply are left", () => {
+  const id = "0123456789abcdef";
+  const block = `${COLD_MARK} (idle 8372 min).\n${cardLine({ ...card, cardId: id, auto: true, est: { resume: 0.53, compact: 0.31, checkpoint: 0.16 } })}`;
+  const items = [
+    { type: "user_message", text: "Hi", messageId: "u-1" },
+    { type: "assistant_message", text: block },
+    { type: "user_message", text: "/clear", messageId: msgId("clear", id) },
+    { type: "assistant_message", text: "Claude switched to a new session: d2f012a2-979c-44ef-8ae3-a334610d0a7c -> a524b6cb-300c-45d2-88e0-d8892d43631a" },
+    { type: "user_message", text: "Hi", messageId: msgId("prompt", id) },
+    { type: "assistant_message", text: "Hi! The awake CLI is finished." },
+  ];
+  const shown = items.flatMap((it) => { const r = transformItem(it); return r === undefined ? [it.text] : r.items.map((p) => `plugin:${(p as { kind: string }).kind}`); });
+  assert.deepEqual(shown, ["Hi", `plugin:${CARD_KIND}`, "Hi! The awake CLI is finished."]);
+  // the owner's own /clear stays; Paseo's switch notice is always removed
+  assert.equal(transformItem({ type: "user_message", text: "/clear", messageId: "8bf1f7bd-40a7-481f-b95d-8ab36485b3cb" }), undefined);
+  assert.equal(transformItem({ type: "user_message", text: "/clear" }), undefined);
+  assert.equal(transformItem({ type: "assistant_message", text: "Claude switched to a new session, as you asked" }), undefined);
+  assert.deepEqual(msgId("compact", id), "pcic-compact-0123456789abcdef");
 });
 test("T39 row texts: pending, sent, failed, busy (retryable), expired", () => {
   assert.equal(pendingText("compact", true), "Compacting, then sending"); assert.equal(pendingText("checkpoint", true), "Cleared, sending with the awt brief"); assert.equal(pendingText("resume", false), "Sending with full context");

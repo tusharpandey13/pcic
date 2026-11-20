@@ -7,6 +7,7 @@ import { readTail } from "./transcript.mjs";
 import { rows, type Handle, type Outcome, type PaseoLike } from "./send.js";
 import type { Store } from "./store.js";
 import type { Config } from "./types.js";
+import { msgId } from "../shared/cold-card.js";
 
 export type CardChoice = "resume" | "compact" | "checkpoint" | "dismiss";
 export type CardStatus = "sent" | "dismissed" | "already_used" | "not_idle" | "expired" | "failed";
@@ -17,7 +18,7 @@ export const AUTO_MAX_AGE_MS = 10 * 60e3;
 export interface CardDeps {
   home: string; env: NodeJS.ProcessEnv; now: () => number; cfg: () => Config; store: Store; log: (m: string) => void;
   paseo: () => PaseoLike | null;
-  sender: { turn(id: string, text: string, s: number): Promise<Outcome>; compact(id: string, s: number): Promise<Outcome>; say(id: string, text: string): Promise<boolean> };
+  sender: { turn(id: string, text: string, s: number, messageId?: string): Promise<Outcome>; compact(id: string, s: number, messageId?: string): Promise<Outcome>; say(id: string, text: string, messageId?: string): Promise<boolean> };
 }
 interface CardFile { v: number; cardId: string; agentId: string; prompt: string; createdAt: number; auto?: boolean; awt?: boolean }
 
@@ -77,19 +78,19 @@ export function makeCards(d: CardDeps) {
     const sendPrompt = async (): Promise<CardResult> => {
       const again = await idleNow(id); // the same-tick check before the send (R26)
       if (again) return fail(card, again === "not_idle" ? "not_idle_before_send" : again, again === "not_idle" ? "the agent became busy" : again);
-      return (await d.sender.say(id, prompt)) ? { status: "sent" } : fail(card, "send_failed");
+      return (await d.sender.say(id, prompt, msgId("prompt", cardId))) ? { status: "sent" } : fail(card, "send_failed");
     };
     try {
       if (choice === "resume") return await sendPrompt();
       if (choice === "compact") {
         const t0 = now();
         try { store.writePending(id, "card"); } catch { return fail(card, "state"); }
-        const out = await d.sender.compact(id, timeout);
+        const out = await d.sender.compact(id, timeout, msgId("compact", cardId));
         if (out.kind !== "completed") return fail(card, `compact_${out.kind === "failed" ? out.code : out.kind}`, "the compaction failed");
         if (!(await compactVerified(id, t0))) return fail(card, "compact_unverified", "the compaction could not be confirmed");
         return await sendPrompt();
       }
-      const out = await d.sender.turn(id, "/clear", timeout);
+      const out = await d.sender.turn(id, "/clear", timeout, msgId("clear", cardId));
       if (out.kind !== "completed") return fail(card, `clear_${out.kind === "failed" ? out.code : out.kind}`, "/clear failed");
       return await sendPrompt();
     } catch { return fail(card, "error"); }

@@ -131,6 +131,7 @@ async function guard(input, env, cfg, home) {
   const agent = env.PASEO_AGENT_ID;
   if (readJson(marker)?.lastAssistantUuid === last.uuid) { record(home, { agent, event: "guard_pass_marker" }, { now, log: quiet }); return PASS; }
   if (cfg.coldChoice === "resume") { record(home, { agent, event: "guard_pass_setting", choice: "resume" }, { now, log: quiet }); return PASS; } // R48
+  if (cfg.coldChoice === "checkpoint" && !(env.AWT_DIR && isDir(env.AWT_DIR))) { record(home, { agent, event: "guard_pass_setting", choice: "resume_no_awt" }, { now, log: quiet }); return PASS; } // R48: no awt record, nothing to continue from
   // The O_EXCL claim decides who blocks, so parallel prompts cannot both block. A lost race passes.
   if (!createExcl(join(dir, claim))) return PASS;
   atomicWrite(marker, JSON.stringify({ lastAssistantUuid: last.uuid, at: now }));

@@ -67,18 +67,41 @@ export function transformText(text: unknown): PluginTimelineTransformResult | un
   return data ? { items: [{ type: "plugin", kind: CARD_KIND, version: CARD_VERSION, data }] } : undefined;
 }
 
+/** R51: the messageId prefix pcic puts on every text it sends for a card (`/clear`, `/compact`, the resent prompt). */
+export const MSG_PREFIX = "pcic-";
+export const msgId = (what: "clear" | "compact" | "prompt", cardId: string): string => `${MSG_PREFIX}${what}-${cardId}`;
+/** Paseo's own notice after `/clear` (Claude provider, `createClaudeSessionChangedNotice`). */
+export const SESSION_SWITCH = /^Claude switched to a new session: \S+ -> \S+$/;
+const EMPTY: PluginTimelineTransformResult = { items: [] };
+
+/** R45, R51: the transform for one timeline item. A row pcic sent, or Paseo's session-switch notice, is removed; a block text becomes the card. */
+export function transformItem(item: unknown): PluginTimelineTransformResult | undefined {
+  const i = item as { type?: unknown; messageId?: unknown; text?: unknown } | null;
+  if (i?.type === "user_message" && typeof i.messageId === "string" && i.messageId.startsWith(MSG_PREFIX)) return EMPTY;
+  if (i?.type === "assistant_message" && typeof i.text === "string" && SESSION_SWITCH.test(i.text.trim())) return EMPTY;
+  return transformText(itemText(item));
+}
+
 // ---- the view (R46) -------------------------------------------------------------------------------
 
 export const fmtUsd = (n: number | null): string => (n === null ? "" : ` ~$${n >= 0.1 ? n.toFixed(2) : String(Number(n.toPrecision(2)))}`);
 export const fmtIdle = (ms: number): string => `${Math.round(ms / 60000)} min`;
 export const fmtTokens = (n: number): string => (n >= 1000 ? `${Math.round(n / 1000)}K` : String(n));
 
+const dollars = (n: number): string => `$${n >= 0.1 ? n.toFixed(2) : String(Number(n.toPrecision(2)))}`;
+/** R51: the one quiet row an auto checkpoint leaves in the chat. */
+export function autoNote(d: CardData): string {
+  const base = "pcic · continued from checkpoint";
+  if (d.resume === null || d.checkpoint === null || d.resume <= d.checkpoint) return base;
+  return `${base} · saved about ${dollars(d.resume - d.checkpoint)} (about ${dollars(d.checkpoint)} instead of ${dollars(d.resume)} for the full context)`;
+}
+
 export interface ViewOption { id: string; choice: Exclude<Choice, "dismiss">; always: boolean; label: string }
 export interface View { header: string; auto: string | null; options: ViewOption[] }
 
 export function viewModel(d: CardData): View {
   const header = `Cache expired ${fmtIdle(d.idleMs)} ago. Context: ${fmtTokens(d.tokens)} tokens.`;
-  if (d.auto) return { header, auto: `Cache expired ${fmtIdle(d.idleMs)} ago. Continuing from checkpoint (your setting; change with: pcic config coldChoice ask)`, options: [] };
+  if (d.auto) return { header, auto: autoNote(d), options: [] };
   const o = (choice: ViewOption["choice"], always: boolean, label: string): ViewOption => ({ id: `${choice}${always ? "+always" : ""}`, choice, always, label });
   const options = [
     o("resume", false, `Resume full context${fmtUsd(d.resume)}`),
