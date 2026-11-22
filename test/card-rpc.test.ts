@@ -75,6 +75,12 @@ test("T40 enabled false: nothing is sent and the card stays usable", async () =>
   const r = await setup({ cfg: { enabled: false } }); mkCard(r);
   assert.equal((await choose(r, "resume")).status, "failed"); assert.deepEqual(sentTexts(r), []); assert.ok(existsSync(cardPath(r.t.home, CARD))); r.cleanup();
 });
+// T49 (R54)
+test("T49 resume an hour after the block refreshes the marker, so the guard passes the resent prompt", async () => {
+  const r = await setup(); mkCard(r); await r.clock.advance(60 * 60e3);
+  assert.equal((await choose(r, "resume")).status, "sent");
+  assert.deepEqual(readJsonFile(join(r.t.home, "guard", "sid1.json")), { lastAssistantUuid: "a1", at: r.clock.now() }); r.cleanup();
+});
 test("T40 always writes coldChoice, keeps the other keys, and only for resume and checkpoint", async () => {
   const r = await setup({ cfg: { guard: true, minContextTokens: 5 } }); mkCard(r);
   await choose(r, "resume", true); assert.deepEqual(readJsonFile(join(r.t.home, "config.json")), { staggerSeconds: 0, minContextTokens: 5, guard: true, coldChoice: "resume" });

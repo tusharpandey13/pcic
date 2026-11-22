@@ -4,7 +4,7 @@ import { execFile } from "node:child_process";
 import { randomBytes } from "node:crypto";
 import { readdirSync, rmSync, statSync } from "node:fs";
 import { join } from "node:path";
-import { atomicWrite, createExcl, hookActive, loadConfig, nowMs, num, pcicHome, priceFor, readJson, record } from "../server/common.mjs";
+import { atomicWrite, createExcl, hookActive, loadConfig, nowMs, num, pcicHome, priceFor, readJson, record, safeName } from "../server/common.mjs";
 import { cardLine, writeCard } from "../server/card.mjs";
 import { readTail } from "../server/transcript.mjs";
 
@@ -15,7 +15,6 @@ const AWT_NOTE = "pcic compaction note: this task keeps an awt record (goal, sta
 const GENERIC_NOTE = "pcic compaction note: this conversation is being compacted because it went idle. The summary must keep: the goal; the user's latest request and constraints (verbatim when short); decisions made and why; work in progress (files with paths, commands, partial results, errors); open questions; the next concrete step. Drop tool output already acted on and file contents that can be read again.";
 
 const isDir = (p) => { try { return statSync(p).isDirectory(); } catch { return false; } };
-const safeName = (s) => String(s).replace(/[^A-Za-z0-9._-]/g, "_").slice(0, 120);
 
 /** R29 */
 async function stop(input, env, _cfg, home) {
@@ -129,7 +128,12 @@ async function guard(input, env, cfg, home) {
   const dir = join(home, "guard"), sid = safeName(input.session_id), marker = join(dir, `${sid}.json`);
   const claim = `${sid}.${safeName(last.uuid)}.claim`;
   const agent = env.PASEO_AGENT_ID;
-  if (readJson(marker)?.lastAssistantUuid === last.uuid) { record(home, { agent, event: "guard_pass_marker" }, { now, log: quiet }); return PASS; }
+  const m = readJson(marker);
+  if (m?.lastAssistantUuid === last.uuid) {
+    // R54: the marker lets a prompt pass only for markerSeconds; an expired one counts as absent, and its claim goes too.
+    if (typeof m.at === "number" && now - m.at <= cfg.markerSeconds * 1000) { record(home, { agent, event: "guard_pass_marker" }, { now, log: quiet }); return PASS; }
+    rmSync(join(dir, claim), { force: true });
+  }
   if (cfg.coldChoice === "resume") { record(home, { agent, event: "guard_pass_setting", choice: "resume" }, { now, log: quiet }); return PASS; } // R48
   if (cfg.coldChoice === "checkpoint" && !(env.AWT_DIR && isDir(env.AWT_DIR))) { record(home, { agent, event: "guard_pass_setting", choice: "resume_no_awt" }, { now, log: quiet }); return PASS; } // R48: no awt record, nothing to continue from
   // The O_EXCL claim decides who blocks, so parallel prompts cannot both block. A lost race passes.

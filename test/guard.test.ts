@@ -50,6 +50,19 @@ test("T27 same prompt twice: block then pass; a different prompt after a block p
   assert.equal((await run(t, p2, "ZQX-PROMPT three", later)).code, 2);
   const ev = historyOf(t).map((h) => h.event); assert.deepEqual(ev, ["guard_block", "guard_pass_marker", "guard_pass_marker", "guard_block"]); t.cleanup();
 });
+// T48 (R54)
+test("T48 the marker expires after markerSeconds: a resend at 9 min passes, at 11 min and 55 h it blocks again", async () => {
+  const t = tmp(); const p = cold(t); const at = (ms: number) => ({ PCIC_NOW: String(NOW + ms) });
+  assert.equal((await run(t, p, "ZQX-PROMPT one")).code, 2);
+  assert.equal((await run(t, p, "ZQX-PROMPT one", at(9 * MIN))).code, 0);
+  const b = await run(t, p, "ZQX-PROMPT one", at(11 * MIN)); assert.equal(b.code, 2); assert.match(b.stderr, /\[pcic-card v1 /);
+  assert.equal(readJsonFile(join(t.home, "guard", "sid1.json")).at, NOW + 11 * MIN);
+  assert.equal((await run(t, p, "ZQX-PROMPT one", at(55 * 60 * MIN))).code, 2);
+  assert.deepEqual(readdirSync(join(t.home, "guard")).filter((f) => f.endsWith(".claim")).length, 1);
+  writeFileSync(join(t.home, "guard", "sid1.json"), JSON.stringify({ lastAssistantUuid: "a1" }));
+  assert.equal((await run(t, p, "ZQX-PROMPT one", at(55 * 60 * MIN + MIN))).code, 2, "a marker with no at counts as expired");
+  assert.deepEqual(historyOf(t).map((h) => h.event), ["guard_block", "guard_pass_marker", "guard_block", "guard_block", "guard_block"]); t.cleanup();
+});
 test("T27 marker dir not writable: the guard passes, never blocks", async () => {
   const t = tmp(); const p = cold(t); mkdirSync(join(t.home, "guard"), { recursive: true }); chmodSync(join(t.home, "guard"), 0o500);
   const r = await run(t, p, "ZQX-PROMPT go"); assert.deepEqual([r.code, r.stdout, r.stderr], [0, "", ""]); chmodSync(join(t.home, "guard"), 0o700); t.cleanup();

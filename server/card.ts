@@ -1,7 +1,8 @@
 // The cold-return card on the daemon side: the RPC `choose` (R47), auto mode (R48) and expiry (R49).
 // Never logs or records the prompt. Sends only the owner's own blocked prompt, `/clear` and `/compact` (R42).
 import { existsSync, readdirSync, renameSync, rmSync } from "node:fs";
-import { atomicWrite, num, readJson, setConfigKey } from "./common.mjs";
+import { join } from "node:path";
+import { atomicWrite, num, readJson, safeName, setConfigKey } from "./common.mjs";
 import { CARD_ID, CARD_TTL_MS, cardPath, cardsDir, pruneCards, usedPath } from "./card.mjs";
 import { readTail } from "./transcript.mjs";
 import { rows, type Handle, type Outcome, type PaseoLike } from "./send.js";
@@ -20,7 +21,7 @@ export interface CardDeps {
   paseo: () => PaseoLike | null;
   sender: { turn(id: string, text: string, s: number, messageId?: string): Promise<Outcome>; compact(id: string, s: number, messageId?: string): Promise<Outcome>; say(id: string, text: string, messageId?: string): Promise<boolean> };
 }
-interface CardFile { v: number; cardId: string; agentId: string; prompt: string; createdAt: number; auto?: boolean; awt?: boolean }
+interface CardFile { v: number; cardId: string; agentId: string; prompt: string; createdAt: number; auto?: boolean; awt?: boolean; sessionId?: string; lastAssistantUuid?: string }
 
 const valid = (c: unknown): c is CardFile => !!c && typeof c === "object" && typeof (c as CardFile).agentId === "string" && typeof (c as CardFile).prompt === "string" && num((c as CardFile).createdAt) !== null;
 
@@ -81,7 +82,11 @@ export function makeCards(d: CardDeps) {
       return (await d.sender.say(id, prompt, msgId("prompt", cardId))) ? { status: "sent" } : fail(card, "send_failed");
     };
     try {
-      if (choice === "resume") return await sendPrompt();
+      if (choice === "resume") {
+        // R54: refresh the marker so the guard passes a card answered after markerSeconds.
+        if (typeof card.sessionId === "string" && typeof card.lastAssistantUuid === "string") try { atomicWrite(join(home, "guard", `${safeName(card.sessionId)}.json`), JSON.stringify({ lastAssistantUuid: card.lastAssistantUuid, at: now() })); } catch {}
+        return await sendPrompt();
+      }
       if (choice === "compact") {
         const t0 = now();
         try { store.writePending(id, "card"); } catch { return fail(card, "state"); }

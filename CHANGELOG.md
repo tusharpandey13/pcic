@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.2.4 (22-Nov-2026)
+
+- Fix: the cold-return marker now expires after `markerSeconds` (default 600) (R54). Before, a blocked prompt that was never resent left a marker that let the next prompt on that session through with full context, days later, instead of blocking it and continuing from a checkpoint. Picking "Resume full context" on a card refreshes the marker, so a card answered late still sends.
+
 ## 0.2.3 (20-Nov-2026)
 
 - The idle checkpoint is quiet in the chat (R52): the checkpoint prompt and `/compact` carry a `pcic-` message id and the client hides them, and the agent's `checkpoint saved` reply is drawn as one grey row, `pcic · checkpoint saved before the cache expired`. A `checkpoint failed: ...` reply stays visible. A turn whose first user message has a `pcic-` id also counts as pcic's own (R16).

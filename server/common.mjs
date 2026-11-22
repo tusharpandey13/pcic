@@ -3,6 +3,9 @@ import { appendFileSync, mkdirSync, readFileSync, renameSync, statSync, writeFil
 import { homedir } from "node:os";
 import { dirname, join } from "node:path";
 
+/** A file-name-safe form of an id (session ids, uuids). */
+export const safeName = (s) => String(s).replace(/[^A-Za-z0-9._-]/g, "_").slice(0, 120);
+
 /** R5: a number is trusted only when finite and not negative. */
 export const num = (x) => (typeof x === "number" && Number.isFinite(x) && x >= 0 ? x : null);
 
@@ -26,7 +29,7 @@ export const SCHEMA = {
   maxJobsPerHour: [30, int(0)], checkpointTimeoutSeconds: [300, int(1)], compactTimeoutSeconds: [300, int(1)],
   pauseMinutes: [60, int(1)], sweepSeconds: [30, int(1)], sendMode: ["auto", (v) => ["auto", "plugin", "cli"].includes(v)],
   paseoBin: ["paseo", (v) => str(v) && v.length > 0],
-  coldChoice: ["ask", (v) => v === "ask" || v === "resume" || v === "checkpoint"], freshContextTokens: [20000, int(0)],
+  coldChoice: ["ask", (v) => v === "ask" || v === "resume" || v === "checkpoint"], freshContextTokens: [20000, int(0)], markerSeconds: [600, int(0)],
   // $/M tokens per model family, from the Anthropic pricing page (18-Nov-2026). Matched by regex on the model id, first hit wins.
   prices: [null, (v) => v === null || (typeof v === "object" && !Array.isArray(v))],
 };

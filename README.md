@@ -144,6 +144,7 @@ State lives in `PCIC_HOME`, default `${XDG_DATA_HOME:-~/.local/share}/pcic`. Set
 | `paseoBin` | `"paseo"` | CLI used by the fallback send mode |
 | `coldChoice` | `"ask"` | `"ask"` (the card), `"resume"` (no block) or `"checkpoint"` (`/clear` and your prompt, automatically) |
 | `freshContextTokens` | `20000` | Tokens a fresh session starts with; used only for the card's checkpoint estimate |
+| `markerSeconds` | `600` | After a block, how long sending again passes with full context |
 | `prices` | `null` | Your own $/M prices, keyed by a substring of the model id: `{"input", "write5m", "write1h", "read", "output"}`. Used only for the guard's estimate |
 
 To exclude one agent, give it the Paseo label `pcic=off`. To turn pcic off everywhere, set `"enabled": false`.
