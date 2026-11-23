@@ -1,7 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { cardLine } from "../server/card.mjs";
-import { COLD_MARK, TEXT_TYPES, cardDataSchema, rowDataSchema, findCard, itemText, parseCardLine, transformText, transformItem, autoNote, msgId, transformerId, PASEO_ID, CARD_KIND, viewModel, resultText, pendingText, fmtUsd } from "../shared/cold-card.js";
+import { COLD_MARK, TEXT_TYPES, cardDataSchema, rowDataSchema, findCard, itemText, parseCardLine, transformText, transformItem, pcicMessageId, autoNote, msgId, transformerId, PASEO_ID, CARD_KIND, viewModel, resultText, pendingText, fmtUsd } from "../shared/cold-card.js";
 
 const card = { cardId: "0123456789abcdef", idleMs: 48_840_000, tokens: 132_000, awt: true, auto: false, est: { resume: 0.33, compact: 0.2, checkpoint: 0.0123 } };
 const line = cardLine(card);
@@ -94,6 +94,16 @@ test("T46 R52 the checkpoint reply becomes one grey pcic row; the pcic- user_mes
   assert.deepEqual(transformItem({ type: "user_message", text: "/compact", messageId: msgId("compact", "j1") }), { items: [] });
   assert.equal(msgId("checkpoint", "j1"), "pcic-checkpoint-j1");
   assert.equal(transformItem({ type: "user_message", text: "checkpoint saved" }), undefined, "the owner's own text stays");
+});
+// T56 (R55)
+test("T56 R55 Paseo 0.17.3 rows: the pcic id in clientMessageId, or the checkpoint text alone, still hides the row", () => {
+  assert.deepEqual(transformItem({ type: "user_message", text: "[pcic checkpoint] ...", messageId: "9f1c-uuid", clientMessageId: msgId("checkpoint", "j1") }), { items: [] });
+  assert.deepEqual(transformItem({ type: "user_message", text: "/compact", clientMessageId: msgId("compact", "j1") }), { items: [] });
+  assert.deepEqual(transformItem({ type: "user_message", text: "[pcic checkpoint] This session has been idle" }), { items: [] });
+  assert.equal(transformItem({ type: "user_message", text: "/compact", clientMessageId: "c-42" }), undefined, "the owner's own /compact stays");
+  assert.equal(transformItem({ type: "user_message", text: "what is [pcic checkpoint]?" }), undefined);
+  assert.equal(pcicMessageId({ clientMessageId: "pcic-prompt-x", messageId: "u" }), "pcic-prompt-x");
+  assert.equal(pcicMessageId({ messageId: "u-1" }), null);
 });
 test("T39 row texts: pending, sent, failed, busy (retryable), expired", () => {
   assert.equal(pendingText("compact", true), "Compacting, then sending"); assert.equal(pendingText("checkpoint", true), "Cleared, sending with the awt brief"); assert.equal(pendingText("resume", false), "Sending with full context");

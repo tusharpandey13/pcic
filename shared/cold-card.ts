@@ -77,14 +77,22 @@ export const msgId = (what: "clear" | "compact" | "prompt" | "checkpoint", cardI
 /** Paseo's own notice after `/clear` (Claude provider, `createClaudeSessionChangedNotice`). */
 export const SESSION_SWITCH = /^Claude switched to a new session: \S+ -> \S+$/;
 const EMPTY: PluginTimelineTransformResult = { items: [] };
+/** R51, R55: pcic's id on a sent row. Paseo 0.17.3+ keeps it as `clientMessageId` (`messageId` may become the provider's id); older builds put it in `messageId`. */
+export const pcicMessageId = (item: unknown): string | null => {
+  const i = item as { messageId?: unknown; clientMessageId?: unknown } | null;
+  for (const v of [i?.clientMessageId, i?.messageId]) if (typeof v === "string" && v.startsWith(MSG_PREFIX)) return v;
+  return null;
+};
+/** R52, R55: the idle checkpoint prompt's first words; a user row starting with them is pcic's even without an id. */
+export const CHECKPOINT_TAG = "[pcic checkpoint]";
 /** R52: the agent's one-line answer to the idle checkpoint, and the row that replaces it. */
 export const CHECKPOINT_SAVED = /^checkpoint saved\.?$/i;
 export const CHECKPOINT_NOTE = "pcic · checkpoint saved before the cache expired";
 
 /** R45, R51, R52: the transform for one timeline item. A row pcic sent, or Paseo's session-switch notice, is removed; a block text becomes the card. */
 export function transformItem(item: unknown): PluginTimelineTransformResult | undefined {
-  const i = item as { type?: unknown; messageId?: unknown; text?: unknown } | null;
-  if (i?.type === "user_message" && typeof i.messageId === "string" && i.messageId.startsWith(MSG_PREFIX)) return EMPTY;
+  const i = item as { type?: unknown; text?: unknown } | null;
+  if (i?.type === "user_message" && (pcicMessageId(i) !== null || (typeof i.text === "string" && i.text.trimStart().startsWith(CHECKPOINT_TAG)))) return EMPTY;
   if (i?.type === "assistant_message" && typeof i.text === "string" && SESSION_SWITCH.test(i.text.trim())) return EMPTY;
   if (i?.type === "assistant_message" && typeof i.text === "string" && CHECKPOINT_SAVED.test(i.text.trim())) return { items: [{ type: "plugin", kind: CARD_KIND, version: CARD_VERSION, data: { note: CHECKPOINT_NOTE } }] };
   return transformText(itemText(item));

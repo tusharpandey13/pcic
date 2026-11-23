@@ -1,6 +1,7 @@
 // Send adapter (R21, R24, R26, R53). pcic never passes sourceAgentId.
 import { execFile, type ChildProcess } from "node:child_process";
 import type { Config } from "./types.js";
+import { pcicMessageId } from "../shared/cold-card.js";
 
 export interface Snap {
   id?: string; provider?: string; cwd?: string; status?: string; activeTurn?: unknown; pendingPermissions?: unknown[];
@@ -94,7 +95,7 @@ export function makeSender(d: SenderDeps) {
 export function turnFirstUser(page: unknown, turnId: string): { text: string; messageId: string | null } | null {
   const entries = (page as { entries?: unknown })?.entries;
   if (!Array.isArray(entries)) return null;
-  for (const e of entries as { turnId?: unknown; item?: { type?: unknown; text?: unknown; messageId?: unknown } }[]) if (e?.turnId === turnId && e.item?.type === "user_message" && typeof e.item.text === "string") return { text: e.item.text, messageId: typeof e.item.messageId === "string" ? e.item.messageId : null };
+  for (const e of entries as { turnId?: unknown; item?: { type?: unknown; text?: unknown; messageId?: unknown; clientMessageId?: unknown } }[]) if (e?.turnId === turnId && e.item?.type === "user_message" && typeof e.item.text === "string") return { text: e.item.text, messageId: pcicMessageId(e.item) ?? (typeof e.item.messageId === "string" ? e.item.messageId : null) };
   return null;
 }
 

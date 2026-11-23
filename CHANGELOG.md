@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.2.5 (23-Nov-2026)
+
+- Fix: after the Paseo 0.17.3 update the idle checkpoint prompt showed as a chat bubble again. Paseo now keeps pcic's id in `clientMessageId`; pcic checks both id fields and the `[pcic checkpoint]` prefix (R55).
+
 ## 0.2.4 (22-Nov-2026)
 
 - Fix: the cold-return marker now expires after `markerSeconds` (default 600) (R54). Before, a blocked prompt that was never resent left a marker that let the next prompt on that session through with full context, days later, instead of blocking it and continuing from a checkpoint. Picking "Resume full context" on a card refreshes the marker, so a card answered late still sends.
