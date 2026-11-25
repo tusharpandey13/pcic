@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.2.6 (25-Nov-2026)
+
+- Fix: a `/compact` bubble showed again after the idle checkpoint. After the compaction Paseo shows the provider's copy of the row, which has no pcic id; pcic now hides a bare `/compact` row with no `clientMessageId` (R56). The "Context compacted" divider stays.
+
 ## 0.2.5 (23-Nov-2026)
 
 - Fix: after the Paseo 0.17.3 update the idle checkpoint prompt showed as a chat bubble again. Paseo now keeps pcic's id in `clientMessageId`; pcic checks both id fields and the `[pcic checkpoint]` prefix (R55).

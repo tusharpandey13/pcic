@@ -105,6 +105,13 @@ test("T56 R55 Paseo 0.17.3 rows: the pcic id in clientMessageId, or the checkpoi
   assert.equal(pcicMessageId({ clientMessageId: "pcic-prompt-x", messageId: "u" }), "pcic-prompt-x");
   assert.equal(pcicMessageId({ messageId: "u-1" }), null);
 });
+// T57 (R56)
+test("T57 R56 the provider's /compact row after a compaction (bare uuid, no clientMessageId) is hidden; a typed /compact with a client id stays", () => {
+  assert.deepEqual(transformItem({ type: "user_message", text: "/compact", messageId: "4e5191f3-d867-4d80-8a63-2bf507f163ec" }), { items: [] });
+  assert.deepEqual(transformItem({ type: "user_message", text: "/compact" }), { items: [] });
+  assert.equal(transformItem({ type: "user_message", text: "/compact", clientMessageId: "msg_1795586071971_xqza4091a", messageId: "msg_1795586071971_xqza4091a" }), undefined);
+  assert.equal(transformItem({ type: "user_message", text: "/compact focus on tests", messageId: "u-2" }), undefined, "a /compact with instructions stays");
+});
 test("T39 row texts: pending, sent, failed, busy (retryable), expired", () => {
   assert.equal(pendingText("compact", true), "Compacting, then sending"); assert.equal(pendingText("checkpoint", true), "Cleared, sending with the awt brief"); assert.equal(pendingText("resume", false), "Sending with full context");
   assert.equal(resultText("resume", true, { status: "sent" }).text, "Sent with full context");

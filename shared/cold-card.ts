@@ -85,14 +85,16 @@ export const pcicMessageId = (item: unknown): string | null => {
 };
 /** R52, R55: the idle checkpoint prompt's first words; a user row starting with them is pcic's even without an id. */
 export const CHECKPOINT_TAG = "[pcic checkpoint]";
+/** R56: a `/compact` row with no `clientMessageId` is the provider's copy that Paseo shows after the compaction; it carries no pcic id. The "Context compacted" divider stays. */
+const isReloadedCompact = (i: { text?: unknown; clientMessageId?: unknown }): boolean => typeof i.text === "string" && i.text.trim() === "/compact" && (typeof i.clientMessageId !== "string" || i.clientMessageId === "");
 /** R52: the agent's one-line answer to the idle checkpoint, and the row that replaces it. */
 export const CHECKPOINT_SAVED = /^checkpoint saved\.?$/i;
 export const CHECKPOINT_NOTE = "pcic · checkpoint saved before the cache expired";
 
-/** R45, R51, R52: the transform for one timeline item. A row pcic sent, or Paseo's session-switch notice, is removed; a block text becomes the card. */
+/** R45, R51, R52, R56: the transform for one timeline item. A row pcic sent, or Paseo's session-switch notice, is removed; a block text becomes the card. */
 export function transformItem(item: unknown): PluginTimelineTransformResult | undefined {
   const i = item as { type?: unknown; text?: unknown } | null;
-  if (i?.type === "user_message" && (pcicMessageId(i) !== null || (typeof i.text === "string" && i.text.trimStart().startsWith(CHECKPOINT_TAG)))) return EMPTY;
+  if (i?.type === "user_message" && (pcicMessageId(i) !== null || (typeof i.text === "string" && i.text.trimStart().startsWith(CHECKPOINT_TAG)) || isReloadedCompact(i))) return EMPTY;
   if (i?.type === "assistant_message" && typeof i.text === "string" && SESSION_SWITCH.test(i.text.trim())) return EMPTY;
   if (i?.type === "assistant_message" && typeof i.text === "string" && CHECKPOINT_SAVED.test(i.text.trim())) return { items: [{ type: "plugin", kind: CARD_KIND, version: CARD_VERSION, data: { note: CHECKPOINT_NOTE } }] };
   return transformText(itemText(item));
