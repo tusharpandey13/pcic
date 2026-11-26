@@ -56,3 +56,15 @@ export function scan(lines) {
 }
 
 export const readTail = async (path) => scan(await tailLines(path));
+
+/** Text of the newest non-sidechain, non-meta user entry that carries text (tool results skipped), or null. */
+export function lastUserText(lines) {
+  for (let i = lines.length - 1; i >= 0; i--) {
+    let e; try { e = JSON.parse(lines[i]); } catch { continue; }
+    if (!e || e.type !== "user" || e.isSidechain || e.isMeta) continue;
+    const c = e.message?.content;
+    const t = typeof c === "string" ? c : Array.isArray(c) ? c.filter((x) => x?.type === "text" && typeof x.text === "string").map((x) => x.text).join("") : "";
+    if (t.trim()) return t;
+  }
+  return null;
+}

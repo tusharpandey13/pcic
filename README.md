@@ -92,7 +92,7 @@ Change it back with `node bin/pcic.mjs config coldChoice ask`. Without the clien
 |---|---|---|
 | Plugin client (`index.client.tsx`, `client/`, `shared/`) | Paseo app | Turns the guard's block into the cold-return card and handles its buttons through the plugin RPC |
 | Plugin `pcic` (`index.server.ts`, `server/`) | Paseo daemon | Tracks Claude agents, sweeps every 30 s on wall-clock time (so a sleeping Mac does not stall it), queues and runs jobs, and sends through the plugin API or, as a fallback, `paseo agent send` |
-| Hook script (`hook/pcic-hook.mjs`) | each Paseo Claude agent | `Stop` writes a session record, `PreCompact` adds summary instructions, `UserPromptSubmit` is the cold-return guard, `SessionStart` (`clear`) prints the awt brief after `/clear` |
+| Hook script (`hook/pcic-hook.mjs`) | each Paseo Claude agent | `Stop` writes a session record, `PreCompact` adds summary instructions, `UserPromptSubmit` is the cold-return guard, `SessionStart` (`clear`) prints the awt brief after `/clear`, `SessionStart` (`compact`) says a checkpoint's limits have ended (R57) |
 | CLI (`bin/pcic.mjs`) | your shell | `install [--uninstall]`, `doctor`, `config <key> [value]`, `hook <event>` |
 | awt | unchanged | Holds the task record; its own `SessionStart` `compact` hook re-injects the brief |
 
@@ -112,7 +112,7 @@ awt init --hooks claude          # if not done already: the awt brief after comp
 node bin/pcic.mjs doctor
 ```
 
-`pcic install` merges four entries (`UserPromptSubmit`, `Stop`, `PreCompact`, and `SessionStart` with matcher `clear`) into `${CLAUDE_CONFIG_DIR:-~/.claude}/settings.json`. Each command ends with `# pcic:hook`. When a `SessionStart` `clear` hook that runs `awt resume` is already there (newer awt installs its own), pcic adds no `clear` entry, so the brief is not injected twice. It is idempotent, keeps a timestamped backup (`settings.json.pcic-bak-*`, the last five) whenever it changes the file, follows a symlink, leaves every other hook alone, and refuses a file that is not valid JSON.
+`pcic install` merges five entries (`UserPromptSubmit`, `Stop`, `PreCompact`, and `SessionStart` with matchers `clear` and `compact`) into `${CLAUDE_CONFIG_DIR:-~/.claude}/settings.json`. Each command ends with `# pcic:hook`. When a `SessionStart` `clear` hook that runs `awt resume` is already there (newer awt installs its own), pcic adds no `clear` entry, so the brief is not injected twice. It is idempotent, keeps a timestamped backup (`settings.json.pcic-bak-*`, the last five) whenever it changes the file, follows a symlink, leaves every other hook alone, and refuses a file that is not valid JSON.
 
 pcic sends through the plugin handle (plain text, with a `messageId`). `sendMode` `cli` is a manual fallback; pcic never switches to it by itself.
 
@@ -157,7 +157,7 @@ To exclude one agent, give it the Paseo label `pcic=off`. To turn pcic off every
 node bin/pcic.mjs doctor
 ```
 
-Read-only. It checks that the four pcic hooks are installed (three when awt provides the `clear` brief), that awt's `SessionStart` `compact` hook is present, that `AWT_COMPACT_BRIEF=1` is not set (the brief would arrive twice), that `pause.json` and `config.json` are valid, and that `PCIC_HOME` is writable. Each problem prints a `fix:` line. Exit 0 when everything is ok, 1 otherwise.
+Read-only. It checks that the five pcic hook entries are installed (four when awt provides the `clear` brief), that awt's `SessionStart` `compact` hook is present, that `AWT_COMPACT_BRIEF=1` is not set (the brief would arrive twice), that `pause.json` and `config.json` are valid, and that `PCIC_HOME` is writable. Each problem prints a `fix:` line. Exit 0 when everything is ok, 1 otherwise.
 
 ## Uninstall
 

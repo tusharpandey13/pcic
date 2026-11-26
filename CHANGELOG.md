@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.2.7 (26-Nov-2026)
+
+- Fix: after an idle checkpoint and compaction, an agent could take the checkpoint as its task, reply `checkpoint saved` and never pick its work back up (R57). The checkpoint text is now a maintenance turn scoped to itself. The compaction notes say the task is the owner's last real message and the next step is the owner's pending step. A new `SessionStart` `compact` hook says the checkpoint's limits have ended. Run `pcic install` again to add the fifth hook entry.
+
 ## 0.2.6 (25-Nov-2026)
 
 - Fix: a `/compact` bubble showed again after the idle checkpoint. After the compaction Paseo shows the provider's copy of the row, which has no pcic id; pcic now hides a bare `/compact` row with no `clientMessageId` (R56). The "Context compacted" divider stays.

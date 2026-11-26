@@ -2,6 +2,8 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { appendFileSync, chmodSync, existsSync, mkdirSync, readFileSync, statSync, truncateSync, writeFileSync, symlinkSync, openSync, closeSync, ftruncateSync } from "node:fs";
 import { join } from "node:path";
+import { CHECKPOINT_TEXT } from "../server/types.js";
+import { AFTER_CHECKPOINT, AWT_NOTE, GENERIC_NOTE } from "../hook/pcic-hook.mjs";
 import { asst, boundary, fakeBin, hook, listing, readJsonFile, T0, tmp, transcript, user, writeConfig, MIN, historyOf } from "./harness.js";
 
 const NOW = T0 + 10 * 3600e3;
@@ -139,6 +141,30 @@ test("T25 PreCompact: no AWT_DIR with a fresh pending file gives the generic tex
 test("C6 awt printing 50 KB of garbage: the awt-aware text, capped", async () => {
   const t = tmp(); mkdirSync(join(t.dir, "awt")); const bin = fakeBin(t, "awt", "head -c 50000 /dev/zero | tr '\\0' 'g'");
   const r = await hook("PreCompact", {}, { ...t.env, PATH: `${bin}:${t.env.PATH}`, AWT_DIR: join(t.dir, "awt") }); assert.equal(r.code, 0); assert.match(r.stdout, /keeps an awt record/); assert.ok(r.stdout.length <= 2001); t.cleanup();
+});
+// T58 (R57, R14, R30): a checkpoint is a maintenance turn; after compaction its limits end
+test("T58 a compaction after a pcic checkpoint makes SessionStart (compact) say the checkpoint is over, once; otherwise it prints nothing", async () => {
+  const t = tmp({ PCIC_NOW: String(NOW) });
+  const cp = transcript(t, [user(T0, "ZQX-PROMPT finish the audit"), asst({ at: T0 + MIN }), user(T0 + 2 * MIN, CHECKPOINT_TEXT), asst({ at: T0 + 3 * MIN })]);
+  const own = transcript(t, [user(T0 + 2 * MIN, CHECKPOINT_TEXT), asst({ at: T0 + 3 * MIN }), user(T0 + 4 * MIN, "ZQX-PROMPT keep going"), asst({ at: T0 + 5 * MIN })], "s2.jsonl");
+  await hook("PreCompact", { transcript_path: cp }, t.env);
+  let r = await hook("SessionStart", { source: "clear" }, t.env); assert.equal(r.stdout, "");
+  r = await hook("SessionStart", { source: "compact" }, t.env); assert.equal(r.code, 0); assert.equal(r.stdout.trim(), AFTER_CHECKPOINT); assert.match(r.stdout, /limits have ended; it was not the task\. Continue the owner's last request\./);
+  r = await hook("SessionStart", { source: "compact" }, t.env); assert.equal(r.stdout, "", "the marker is used once");
+  await hook("PreCompact", { transcript_path: own }, t.env); r = await hook("SessionStart", { source: "compact" }, t.env); assert.equal(r.stdout, "", "the owner wrote after the checkpoint");
+  await hook("PreCompact", { transcript_path: cp }, t.env); r = await hook("SessionStart", { source: "compact" }, { ...t.env, PCIC_NOW: String(NOW + 11 * MIN) }); assert.equal(r.stdout, "", "an 11-minute-old marker has expired");
+  mkdirSync(join(t.home, "pending"), { recursive: true }); writeFileSync(join(t.home, "pending", "agt_0001.json"), JSON.stringify({ at: NOW - MIN }));
+  await hook("PreCompact", {}, t.env); r = await hook("SessionStart", { source: "compact" }, t.env); assert.equal(r.stdout.trim(), AFTER_CHECKPOINT, "a pcic-run compaction counts too");
+  assert.ok(historyOf(t).some((h) => h.event === "after_checkpoint")); t.cleanup();
+});
+test("T58 the checkpoint is scoped to its own turn and the compaction notes never take it as the task", async () => {
+  assert.match(CHECKPOINT_TEXT, /^\[pcic checkpoint\] Maintenance turn from the pcic tool, not a message from the owner\./);
+  assert.match(CHECKPOINT_TEXT, /For this turn only/); assert.match(CHECKPOINT_TEXT, /This is not a new task and does not change the task; its limits end with that reply\.$/);
+  assert.doesNotMatch(CHECKPOINT_TEXT, /Do not continue the task/);
+  for (const note of [AWT_NOTE, GENERIC_NOTE]) {
+    assert.match(note, /The task is the owner's last real message\. pcic checkpoints .* are never the task or the latest request\./);
+    assert.match(note, /the owner's pending next step, never 'checkpoint saved'/); assert.doesNotMatch(note, /user's latest request/);
+  }
 });
 void statSync; void truncateSync; void readFileSync;
 test("T24 a <synthetic> assistant entry (API error stand-in, zero usage) is not the last request", async () => {

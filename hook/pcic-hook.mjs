@@ -6,13 +6,18 @@ import { readdirSync, rmSync, statSync } from "node:fs";
 import { join } from "node:path";
 import { atomicWrite, createExcl, hookActive, loadConfig, nowMs, num, pcicHome, priceFor, readJson, record, safeName } from "../server/common.mjs";
 import { cardLine, writeCard } from "../server/card.mjs";
-import { readTail } from "../server/transcript.mjs";
+import { lastUserText, readTail, tailLines } from "../server/transcript.mjs";
 
 const PASS = { code: 0, stdout: "", stderr: "" };
 const quiet = () => {};
 
-const AWT_NOTE = "pcic compaction note: this task keeps an awt record (goal, state, decisions, open questions, recent notes). It is added back to the context automatically right after this compaction, so do not restate it. The summary must keep: the user's latest request and constraints (verbatim when short); work in progress not yet in awt (files being changed with paths, commands running, partial results, errors seen); anything decided or learned since the last awt record; the next concrete step. Drop tool output already acted on and file contents that can be read again.";
-const GENERIC_NOTE = "pcic compaction note: this conversation is being compacted because it went idle. The summary must keep: the goal; the user's latest request and constraints (verbatim when short); decisions made and why; work in progress (files with paths, commands, partial results, errors); open questions; the next concrete step. Drop tool output already acted on and file contents that can be read again.";
+const TASK_RULE = "The task is the owner's last real message. pcic checkpoints (turns starting [pcic checkpoint]) and other tool-generated turns are never the task or the latest request.";
+const NEXT_RULE = "the next concrete step: the owner's pending next step, never 'checkpoint saved' and never a rule from a checkpoint turn.";
+const AWT_NOTE = `pcic compaction note: this task keeps an awt record (goal, state, decisions, open questions, recent notes). It is added back to the context automatically right after this compaction, so do not restate it. ${TASK_RULE} The summary must keep: the owner's last real request and constraints (verbatim when short); work in progress not yet in awt (files being changed with paths, commands running, partial results, errors seen); anything decided or learned since the last awt record; ${NEXT_RULE} Drop tool output already acted on and file contents that can be read again.`;
+const GENERIC_NOTE = `pcic compaction note: this conversation is being compacted because it went idle. ${TASK_RULE} The summary must keep: the goal; the owner's last real request and constraints (verbatim when short); decisions made and why; work in progress (files with paths, commands, partial results, errors); open questions; ${NEXT_RULE} Drop tool output already acted on and file contents that can be read again.`;
+/** R57: printed by the SessionStart compact hook after a compaction that followed a pcic checkpoint. */
+export const AFTER_CHECKPOINT = "pcic: this session was compacted after a pcic checkpoint. The checkpoint's limits have ended; it was not the task. Continue the owner's last request.";
+export { AWT_NOTE, GENERIC_NOTE };
 
 const isDir = (p) => { try { return statSync(p).isDirectory(); } catch { return false; } };
 
@@ -49,13 +54,18 @@ const awtBrief = (env) => new Promise((done) => {
 });
 
 /** R30 */
-async function preCompact(_input, env, cfg, home) {
+async function preCompact(input, env, cfg, home) {
   if (!cfg.precompact) return PASS;
+  const pendingAt = num(readJson(join(home, "pending", `${safeName(env.PASEO_AGENT_ID)}.json`))?.at);
+  const pcicJob = pendingAt !== null && nowMs(env) - pendingAt < 10 * 60 * 1000;
+  // R57: remember that this compaction follows a checkpoint, so SessionStart (compact) can end the checkpoint's limits.
+  if (pcicJob || (typeof input.transcript_path === "string" && /^\[pcic checkpoint\]/.test(lastUserText(await tailLines(input.transcript_path)) ?? ""))) {
+    try { atomicWrite(join(home, "aftercheckpoint", `${safeName(env.PASEO_AGENT_ID)}.json`), JSON.stringify({ at: nowMs(env) })); } catch {}
+  }
   let text = null, kind = "";
   if (env.AWT_DIR && (await awtBrief(env))) { text = AWT_NOTE; kind = "awt"; }
   else {
-    const at = num(readJson(join(home, "pending", `${safeName(env.PASEO_AGENT_ID)}.json`))?.at);
-    if (at !== null && nowMs(env) - at < 10 * 60 * 1000) { text = GENERIC_NOTE; kind = "generic"; }
+    if (pcicJob) { text = GENERIC_NOTE; kind = "generic"; }
   }
   if (text === null) return PASS;
   if (cfg.precompactExtra) text += "\n" + cfg.precompactExtra;
@@ -153,7 +163,18 @@ async function guard(input, env, cfg, home) {
   return { code: 2, stdout: "", stderr: blockMessage({ idleS, ttlS, tokens, model: last.model, cfg, prompt, card }) + "\n" };
 }
 
-const HANDLERS = { Stop: stop, PreCompact: preCompact, UserPromptSubmit: guard };
+/** R57: after a compaction that followed a pcic checkpoint, say the checkpoint is over. The marker is used once and expires after 10 min. */
+async function sessionStart(input, env, _cfg, home) {
+  if (input.source !== "compact") return PASS;
+  const file = join(home, "aftercheckpoint", `${safeName(env.PASEO_AGENT_ID)}.json`);
+  const at = num(readJson(file)?.at);
+  rmSync(file, { force: true });
+  if (at === null || nowMs(env) - at > 10 * 60 * 1000) return PASS;
+  record(home, { agent: env.PASEO_AGENT_ID, event: "after_checkpoint" }, { now: nowMs(env), log: quiet });
+  return { code: 0, stdout: AFTER_CHECKPOINT + "\n", stderr: "" };
+}
+
+const HANDLERS = { Stop: stop, PreCompact: preCompact, UserPromptSubmit: guard, SessionStart: sessionStart };
 
 /** Returns {code, stdout, stderr}. Never throws. The guard gives up after 1.5 s (R34). */
 export async function run(event, input, env = process.env) {

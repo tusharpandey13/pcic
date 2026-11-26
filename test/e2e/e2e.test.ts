@@ -212,12 +212,26 @@ test("E2 no self-test: no probe agent and no verdict.json after the start (R53)"
 });
 
 // ---- phase 1: E3/E14 E4 E5 E6 E7 E11 E15 E16 (concurrent) -----------------------------------------
-test("phase 1 runs E3 E4 E5 E6 E7 E11 E15 E16 E18 E19 together", { skip: !(ON && PAID && wanted("E3", "E4", "E5", "E6", "E7", "E11", "E15", "E16", "E18", "E19")), timeout: 1_500_000 }, async () => {
+test("phase 1 runs E3 E4 E5 E6 E7 E11 E15 E16 E18 E19 E21 together", { skip: !(ON && PAID && wanted("E3", "E4", "E5", "E6", "E7", "E11", "E15", "E16", "E18", "E19", "E21")), timeout: 1_500_000 }, async () => {
   setCfg({ sendMode: "plugin" }); // forced plugin: E14 is E3's run
   await phase({
     async E3() {
       const t0 = Date.now(); const { id } = await built({ name: "e3", awt: true }); const awtDir = join(tmp, "awt", "e3"); ctrl.e3 = { id, awtDir };
       return expectFullJob(id, "plugin", awtDir, t0);
+    },
+    async E21() { // R57: after checkpoint + compaction the agent resumes the owner's pending step, not the checkpoint
+      const t0 = Date.now();
+      const { id } = await built({ name: "e21", awt: true, prompt: "You have a two-step task. Step 1: read the file big.md in full with the Read tool (page with offset and limit if needed so that you see all of it), then stop and reply with exactly: step 1 done. Step 2, on your next turn: create the file zqx-step2.txt containing ZQX-STEP-2, then reply with exactly: step 2 done" });
+      await waitFor("compacted", () => evs(id).includes("compacted") || evs(id).includes("compact_failed") || evs(id).includes("checkpoint_failed"), 330_000);
+      assert.ok(order(evs(id), ["checkpoint_ok", "precompact", "compacted"]), evs(id).join(","));
+      const b = boundaryOf(id)!; assert.ok(b.t.slice(b.i + 1).map(textOf).join("\n").includes("checkpoint's limits have ended"), "no R57 line after the boundary");
+      const a = await sh("awt", ["list", "--since", new Date(t0).toISOString(), "--json"], { env: awtEnv(join(tmp, "awt", "e21")), cwd: join(tmp, "awt", "e21") });
+      assert.ok(/step ?2|zqx-step2/i.test(a.out), `awt next is not the owner's step 2: ${a.out.slice(0, 300)}`);
+      await idle(id); const n = (await timeline(id)).length;
+      const r = await pas("agent", "send", id, "continue"); assert.equal(r.code, 0, r.err); await idle(id);
+      const after = (await timeline(id)).slice(n).filter((x) => x.type === "assistant_message").map((x) => x.text).join("\n");
+      assert.ok(!/checkpoint saved/i.test(after), `resumed with the checkpoint reply: ${after.slice(0, 200)}`);
+      assert.ok(existsSync(join(proj, "zqx-step2.txt")) && readFileSync(join(proj, "zqx-step2.txt"), "utf8").includes("ZQX-STEP-2"), `step 2 not done: ${after.slice(0, 200)}`);
     },
     async E4() {
       const { id } = await built({ name: "e4" }); await waitFor("compacted", () => evs(id).includes("compacted") || evs(id).includes("compact_failed"), 330_000);
@@ -449,6 +463,6 @@ test("E20 the cold-return card: block, card line, every choice through pcic.choo
 });
 
 // ---- per-case reports ------------------------------------------------------------------------------
-for (const id of ["E3", "E4", "E5", "E6", "E7", "E8", "E9", "E10", "E11", "E12", "E13", "E15", "E16", "E17", "E18", "E19"]) test(`${id} (see E2E-RUBRIC.md)`, { skip: !(ON && PAID) }, verdictOf(id));
+for (const id of ["E3", "E4", "E5", "E6", "E7", "E8", "E9", "E10", "E11", "E12", "E13", "E15", "E16", "E17", "E18", "E19", "E21"]) test(`${id} (see E2E-RUBRIC.md)`, { skip: !(ON && PAID) }, verdictOf(id));
 test("E14 plugin mode is E3's forced-plugin run", { skip: !(ON && PAID && wanted("E3")) }, () => { assert.ok(results.get("E3")?.ok, "E3 failed"); });
 test("spend summary", { skip: !(ON && PAID) }, () => { logLine(`TOTAL est. spend $${spend(true).toFixed(3)} (cap $${CAP})`); assert.ok(spend() <= CAP); });
