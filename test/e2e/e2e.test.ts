@@ -225,8 +225,9 @@ test("phase 1 runs E3 E4 E5 E6 E7 E11 E15 E16 E18 E19 E21 together", { skip: !(O
       await waitFor("compacted", () => evs(id).includes("compacted") || evs(id).includes("compact_failed") || evs(id).includes("checkpoint_failed"), 330_000);
       assert.ok(order(evs(id), ["checkpoint_ok", "precompact", "compacted"]), evs(id).join(","));
       const b = boundaryOf(id)!; assert.ok(b.t.slice(b.i + 1).map(textOf).join("\n").includes("checkpoint's limits have ended"), "no R57 line after the boundary");
-      const a = await sh("awt", ["list", "--since", new Date(t0).toISOString(), "--json"], { env: awtEnv(join(tmp, "awt", "e21")), cwd: join(tmp, "awt", "e21") });
-      assert.ok(/step ?2|zqx-step2/i.test(a.out), `awt next is not the owner's step 2: ${a.out.slice(0, 300)}`);
+      const a = await sh("awt", ["resume"], { env: awtEnv(join(tmp, "awt", "e21")), cwd: join(tmp, "awt", "e21") }); void t0;
+      const nextLine = a.out.split("\n").find((l) => /^\s*next:/i.test(l)) ?? "";
+      assert.ok(/step ?2|zqx-step2/i.test(nextLine), `awt next is not the owner's step 2: ${a.out.slice(0, 600)}`);
       await idle(id); const n = (await timeline(id)).length;
       const r = await pas("agent", "send", id, "continue"); assert.equal(r.code, 0, r.err); await idle(id);
       const after = (await timeline(id)).slice(n).filter((x) => x.type === "assistant_message").map((x) => x.text).join("\n");
@@ -409,7 +410,7 @@ const cardFiles = () => (existsSync(join(pcic, "cards")) ? readdirSync(join(pcic
 const CARD_RE = /\[pcic-card v1 ([0-9a-f]{16}) [^\]]*\]/;
 test("V13 the Paseo plugin builder bundles the client entry of a local install (free)", { skip: !ON }, async () => {
   const cat = await wsCall("plugin.catalog.get.request", {}, "plugin.catalog.get.response"); const p = cat.plugins.find((x: any) => x.id === "pcic"); assert.ok(p?.clientBundle, "no client bundle for pcic");
-  assert.ok(/pcic-cold-card-user-message/.test(p.clientBundle) && /"pcic-cold-card"/.test(p.clientBundle) && /pcic-card v1/.test(p.clientBundle), "the bundle lacks the transformer, the renderer kind or the card line");
+  assert.ok(/user_message/.test(p.clientBundle) && /"pcic-cold-card"/.test(p.clientBundle) && /pcic-card v1/.test(p.clientBundle), "the bundle lacks the transformer, the renderer kind or the card line");
   logLine(`V13 PASS client bundle ${p.clientBundle.length} bytes, hash ${p.clientBundleHash}`);
 });
 const lastUsage = (id: string) => transcript(id).filter((e) => e.type === "assistant" && e.message?.usage).pop()?.message?.usage;

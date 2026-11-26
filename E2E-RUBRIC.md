@@ -152,3 +152,7 @@ One line per case: `id PASS|FAIL cost=$x evidence=<dir>`, plus the run total aga
 - V12: the first request after `/clear` read 13,640 and wrote 9,188 tokens (see SPEC).
 - V13: client bundle present (free test `V13 ...`).
 - Not covered: the card was not drawn (no Paseo app UI was driven), so R46's rendering and the click path are unverified; `checkpoint` with `always`, the auto mode (R48) and a failed compaction were not run live.
+
+### E21 result (26-Nov-2026, Haiku, est. $0.15 for the passing run, $0.12 for a first run that failed on a wrong harness assertion)
+
+`PCIC_E2E=1 PCIC_E2E_PAID=1 PCIC_E2E_REAL_AUTH=1 PCIC_E2E_ONLY=E21`. PASS: checkpoint, `precompact`, `compacted`; the R57 line followed the boundary; the awt `next:` named step 2; after `continue` the agent wrote `zqx-step2.txt` and no reply said `checkpoint saved`. V13 (free) passed after its check stopped looking for the literal transformer id, which is now built at runtime.
